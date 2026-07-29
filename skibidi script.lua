@@ -1,3 +1,10 @@
+-- ================================================================================
+-- IVY HUB V2 - COMPACT EDITION (HIDER EXCEPTION & DISPLAY LAYER TOP INTEGRATION)
+-- Features: Qb AB, NO OOB, Hider, uwu magnets, Ball TP, Sticky Head, LegitPV, 
+--           Advanced Tackle Reach (XYZ), Head Hitbox, Loop Speed, Gravity, JP, 
+--           Auto Stick, Tap Bumper, Auto Rocket, Fling, Red Skybox, potato graphics & Config Engine
+-- ================================================================================
+
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
@@ -5,6 +12,7 @@ local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LocalPlayer = Players.LocalPlayer
 local CONFIG_FOLDER = "IvyHub_Configs"
@@ -33,14 +41,29 @@ end
 -- MASTER CONFIGURATION TABLE
 -- ================================================================================
 _G.HubConfig = _G.HubConfig or {
+    -- Qb AB Engine Configuration
+    QBAim = {
+        Enabled = false,
+        TeamFilter = true,
+        ShowArc = true,
+        SafeArc = true,
+        TargetHighlight = true,
+        LeadDelay = 0.38,
+        PeakHeight = 14.00,
+        QBDrift = 0.00,
+        LockKeybind = Enum.KeyCode.H,
+        ThrowKeybind = Enum.KeyCode.T,
+        ToggleKeybind = Enum.KeyCode.P
+    },
+
+    -- Physics & Out Of Bounds Safety
+    NoOOB = { Enabled = false, Keybind = Enum.KeyCode.Unknown },
+
     uwuMagnets = { Enabled = false, Power = 55, Range = 25, Keybind = Enum.KeyCode.F },
     BTP = { Enabled = false, MaxDist = 35, CatchArm = "RightHand", Keybind = Enum.KeyCode.E },
     Sticky = { Enabled = false, Range = 10, Smoothness = 12, Strength = 12, Keybind = Enum.KeyCode.Unknown },
     LegitPV = { Enabled = false, PullVec = 0.01, MaxDist = 25, Keybind = Enum.KeyCode.Unknown },
-    
-    -- Updated Tackle Reach Configuration
     TackleReach = { Enabled = false, SizeX = 2.52, SizeY = 5.4, SizeZ = 1.41, Transparency = 0.7, Keybind = Enum.KeyCode.Unknown },
-    
     HeadHitbox = { Enabled = false, HeadSize = 3.0, Transparency = 0.5, Keybind = Enum.KeyCode.Unknown },
     Speed = { Enabled = false, SpeedVal = 22.2, Keybind = Enum.KeyCode.Unknown },
     Gravity = { Enabled = false, GravityVal = 178.4, Keybind = Enum.KeyCode.Unknown },
@@ -53,7 +76,7 @@ _G.HubConfig = _G.HubConfig or {
     
     RedSky = { Enabled = false, Brightness = 2, Keybind = Enum.KeyCode.Unknown },
     PotatoGraphics = { Enabled = false, Keybind = Enum.KeyCode.Unknown },
-    Misc = { Keybind = Enum.KeyCode.RightShift }
+    Misc = { Keybind = Enum.KeyCode.RightShift, Hider = false, HiderKeybind = Enum.KeyCode.Unknown }
 }
 
 -- Config Serialization Engine
@@ -173,6 +196,110 @@ local function triggerTapBumperImpulse()
         bv.Parent = hrp
         task.delay(0.1, function()
             if bv and bv.Parent then bv:Destroy() end
+        end)
+    end
+end
+
+-- ================================================================================
+-- QB AB (QB AIM ENGINE CORE LOGIC & MATH MODULE)
+-- ================================================================================
+local QBAimMathModule = {}
+do
+    local ballGravity = 28
+    local gravityVector = Vector3.new(0, -ballGravity, 0)
+    local defaultBallSpeed = 95
+
+    local function flat(v) return Vector3.new(v.X, 0, v.Z) end
+    local function unit(v, fallback) return v.Magnitude < 1e-6 and (fallback or Vector3.new(1, 0, 0)) or v.Unit end
+    local function clampMagnitude(v, maxMag) return (v and v.Magnitude > maxMag and maxMag > 0) and (v.Unit * maxMag) or (v or Vector3.zero) end
+    local function distXZ(a, b) return (flat(b) - flat(a)).Magnitude end
+    local function ballAt(orig, vel, t) return orig + vel * t + 0.5 * gravityVector * t * t end
+    local function landing(orig, vel)
+        local disc = vel.Y * vel.Y + 2 * ballGravity * orig.Y
+        if disc < 0 then return nil, nil end
+        local t = (vel.Y + math.sqrt(disc)) / ballGravity
+        return t > 0 and ballAt(orig, vel, t) or nil, t
+    end
+
+    local function targetAtTime(params, receiverStart, wrVel, t)
+        local delay = math.max(params.leadDelay or 0, 0)
+        local target = receiverStart + flat(wrVel) * (t + delay)
+        local catchY = (params.catchY or receiverStart.Y) + (params.solveYBias or 0)
+        return Vector3.new(target.X, catchY, target.Z), delay
+    end
+
+    local function interceptValue(params, orig, receiverStart, wrVel, qbVel, speed, t)
+        local inherited = flat(qbVel or Vector3.zero) * (params.qbInheritance or 0)
+        local target = targetAtTime(params, receiverStart, wrVel, t)
+        local displacement = target - orig - inherited * t - 0.5 * gravityVector * t * t
+        return displacement:Dot(displacement) - speed * speed * t * t
+    end
+
+    function QBAimMathModule.ballAt(orig, vel, t) return ballAt(orig, vel, t) end
+
+    function QBAimMathModule.solve(params)
+        local speed = params.ballPower or defaultBallSpeed
+        local wrVel = clampMagnitude(flat(params.targetVelocity or Vector3.zero), params.maxRunSpeed or 21)
+        local qbVel = clampMagnitude(flat(params.qbVelocity or Vector3.zero), params.maxRunSpeed or 21)
+        local orig = params.originPosition
+        local receiverPos = params.receiverAnchorPosition or params.receiverPosition
+        if not orig or not receiverPos then return nil end
+
+        local receiverStart = Vector3.new(receiverPos.X, params.catchY or receiverPos.Y, receiverPos.Z)
+        local minT, maxT, dt = params.minTime or 0.35, params.maxTime or 6, params.dt or 0.01
+        local bestRoot, bestNear = nil, nil
+
+        for t = minT, maxT, dt do
+            local val = interceptValue(params, orig, receiverStart, wrVel, qbVel, speed, t)
+            local target, delay = targetAtTime(params, receiverStart, wrVel, t)
+            local displacement = target - orig - flat(qbVel) * (params.qbInheritance or 0) * t - 0.5 * gravityVector * t * t
+            local reqVel = displacement / t
+            local reqSpeed = reqVel.Magnitude
+
+            if reqSpeed > 1e-6 then
+                local dir = reqVel.Unit
+                local angle = math.deg(math.asin(math.clamp(dir.Y, -1, 1)))
+                if angle >= (params.minAngle or -5) and angle <= (params.maxAngle or 55) then
+                    local throwVel = dir * speed
+                    local catchPos = ballAt(orig, throwVel, t)
+                    local miss = (catchPos - target).Magnitude
+                    local candidate = {
+                        time = t, origin = orig, target = target, c1Point = target,
+                        velocity = throwVel, speed = speed, aimPoint = orig + dir * (params.aimScale or 1000),
+                        angleDeg = angle, targetMiss = miss, yError = math.abs(catchPos.Y - target.Y),
+                        landing = landing(orig, throwVel)
+                    }
+                    if miss <= (params.nearTargetMissTolerance or 0.05) and (not bestNear or miss < bestNear.targetMiss) then
+                        bestNear = candidate
+                    elseif miss <= (params.targetMissTolerance or 0.35) and (not bestRoot or miss < bestRoot.targetMiss) then
+                        bestRoot = candidate
+                    end
+                end
+            end
+        end
+        return bestRoot or bestNear
+    end
+end
+
+-- ================================================================================
+-- HIDER LOGIC ENGINE (PRESERVES IVY_HUB_INTERFACE)
+-- ================================================================================
+local hiderConnection = nil
+
+local function runHiderLogic()
+    local hui = gethui and gethui() or game:GetService("CoreGui")
+    if hui then
+        for _, v in ipairs(hui:GetDescendants()) do
+            if v:IsA("ScreenGui") and v.Name ~= "IVY_HUB_INTERFACE" then
+                pcall(function() v:Destroy() end)
+            end
+        end
+        if hiderConnection then hiderConnection:Disconnect() end
+        hiderConnection = hui.ChildAdded:Connect(function(c)
+            task.wait()
+            if c:IsA("ScreenGui") and c.Name ~= "IVY_HUB_INTERFACE" then
+                pcall(function() c:Destroy() end)
+            end
         end)
     end
 end
@@ -727,7 +854,120 @@ RunService.Heartbeat:Connect(function()
 end)
 
 ----------------------------------------------------------------------------------
--- 7. HEAD HITBOX EXPANDER
+-- 7. QB AB TRACKING & TARGETING LOOPS
+----------------------------------------------------------------------------------
+local qbTargetPlayer = nil
+
+local function getBestQBTarget()
+    local char, hrp = getChar()
+    if not hrp then return nil end
+    local camera = Workspace.CurrentCamera
+    local mouse = LocalPlayer:GetMouse()
+    local bestPlayer, bestDist = nil, math.huge
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character then
+            local eHrp = p.Character:FindFirstChild("HumanoidRootPart")
+            if eHrp and camera then
+                local sameTeam = false
+                pcall(function()
+                    local myTeam = LocalPlayer:FindFirstChild("Replicated") and LocalPlayer.Replicated:FindFirstChild("TeamID") and LocalPlayer.Replicated.TeamID.Value
+                    local pTeam = p:FindFirstChild("Replicated") and p.Replicated:FindFirstChild("TeamID") and p.Replicated.TeamID.Value
+                    if myTeam and pTeam and myTeam == pTeam then sameTeam = true end
+                end)
+
+                if not _G.HubConfig.QBAim.TeamFilter or sameTeam then
+                    local sPos, onScreen = camera:WorldToViewportPoint(eHrp.Position)
+                    if onScreen then
+                        local d = (Vector2.new(mouse.X, mouse.Y) - Vector2.new(sPos.X, sPos.Y)).Magnitude
+                        if d < bestDist then
+                            bestDist = d
+                            bestPlayer = p
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return bestPlayer
+end
+
+local function executeQBThrow()
+    if not _G.HubConfig.QBAim.Enabled or not qbTargetPlayer or not qbTargetPlayer.Character then return end
+    local char, hrp = getChar()
+    local eHrp = qbTargetPlayer.Character:FindFirstChild("HumanoidRootPart")
+    local ball = findFootballPart()
+    if not hrp or not eHrp or not ball then return end
+
+    local plan = QBAimMathModule.solve({
+        originPosition = ball.Position,
+        receiverPosition = eHrp.Position,
+        targetVelocity = eHrp.AssemblyLinearVelocity,
+        qbVelocity = hrp.AssemblyLinearVelocity,
+        ballPower = 95,
+        leadDelay = tonumber(_G.HubConfig.QBAim.LeadDelay) or 0.38,
+        catchY = eHrp.Position.Y + (tonumber(_G.HubConfig.QBAim.PeakHeight) or 14.00)
+    })
+
+    if plan and plan.aimPoint then
+        local gameEv = nil
+        pcall(function()
+            for _, folder in ipairs({Workspace:FindFirstChild("Games"), ReplicatedStorage:FindFirstChild("Games")}) do
+                if folder then
+                    for _, gameInst in ipairs(folder:GetChildren()) do
+                        local re = gameInst:FindFirstChild("ReEvent") or (gameInst:FindFirstChild("Replicated") and gameInst.Replicated:FindFirstChild("ReEvent"))
+                        if re then gameEv = re break end
+                    end
+                end
+            end
+        end)
+
+        if gameEv then
+            gameEv:FireServer("Mechanics", "ThrowBall", {
+                Target = plan.aimPoint,
+                AutoThrow = false,
+                Power = 100
+            })
+        end
+    end
+end
+
+----------------------------------------------------------------------------------
+-- 8. NO OOB (NO OUT OF BOUNDS) ENGINE
+----------------------------------------------------------------------------------
+RunService.Heartbeat:Connect(function()
+    if not _G.HubConfig.NoOOB or not _G.HubConfig.NoOOB.Enabled then return end
+
+    local ball = findFootballPart()
+    local char, hrp = getChar()
+    if not char or not hrp or not ball then return end
+
+    local isHolding = (ball.Position - hrp.Position).Magnitude <= 10 or ball:IsDescendantOf(char)
+    if not isHolding then return end
+
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            local name = obj.Name:lower()
+            if name:find("oob") or name:find("outofbounds") or name:find("out_of_bounds") or name:find("sideline") or name:find("border") then
+                if obj.CanTouch then
+                    obj.CanTouch = false
+                end
+            end
+        end
+    end
+
+    local ray = Workspace:Raycast(hrp.Position + Vector3.new(0, 5, 0), Vector3.new(0, -20, 0))
+    if ray and ray.Instance then
+        local hitName = ray.Instance.Name:lower()
+        if hitName:find("oob") or hitName:find("out") or hitName:find("sideline") then
+            local pushDir = (Vector3.new(0, hrp.Position.Y, 0) - hrp.Position).Unit
+            hrp.AssemblyLinearVelocity = Vector3.new(pushDir.X * 15, hrp.AssemblyLinearVelocity.Y, pushDir.Z * 15)
+        end
+    end
+end)
+
+----------------------------------------------------------------------------------
+-- 9. HEAD HITBOX EXPANDER
 ----------------------------------------------------------------------------------
 RunService.Heartbeat:Connect(function()
     if not _G.HubConfig.HeadHitbox.Enabled then return end
@@ -746,7 +986,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 ----------------------------------------------------------------------------------
--- 8. VISUALS & ENVIRONMENT
+-- 10. VISUALS & ENVIRONMENT
 ----------------------------------------------------------------------------------
 task.spawn(function()
     while task.wait(1) do
@@ -783,7 +1023,7 @@ task.spawn(function()
 end)
 
 ----------------------------------------------------------------------------------
--- 9. MOVEMENT & PHYSICAL OVERRIDES
+-- 11. MOVEMENT & PHYSICAL OVERRIDES
 ----------------------------------------------------------------------------------
 local lastJumpTime = 0
 
@@ -813,12 +1053,14 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ================================================================================
--- IVY HUB COMPACT ORGANIC GUI FRAMEWORK
+-- IVY HUB COMPACT ORGANIC GUI FRAMEWORK (TOP-LAYER PRIORITY)
 -- ================================================================================
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "IVY_HUB_INTERFACE"
 ScreenGui.ResetOnSpawn = false
+ScreenGui.DisplayOrder = 999999999
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
 local THEME = {
     Bg = Color3.fromRGB(10, 15, 12),
@@ -1062,7 +1304,7 @@ function CyberGUI:CreateTab(tabName)
 
     local TabObj = { Button = TabButton, Indicator = Indicator, Container = Container }
 
-    function TabObj:AddToggle(labelName, configRef, configKey)
+    function TabObj:AddToggle(labelName, configRef, configKey, onToggleCallback)
         local Card = Instance.new("Frame", Container)
         Card.Size = UDim2.new(0.97, 0, 0, 25)
         Card.BackgroundColor3 = THEME.Card
@@ -1110,11 +1352,13 @@ function CyberGUI:CreateTab(tabName)
         local function SetState(state)
             configRef[configKey] = state
             UpdateVisuals()
+            if onToggleCallback then onToggleCallback(state) end
         end
 
         local function ToggleAction()
             configRef[configKey] = not configRef[configKey]
             UpdateVisuals()
+            if onToggleCallback then onToggleCallback(configRef[configKey]) end
         end
 
         ToggleBtn.MouseButton1Click:Connect(ToggleAction)
@@ -1286,7 +1530,26 @@ end
 -- TAB CONTROLS REGISTRATION
 -- ================================================================================
 
--- 1. Auto Stick Tab
+-- 1. Qb AB Tab
+local QbABTab = CyberGUI:CreateTab("Qb AB")
+local qbEnableTgl = QbABTab:AddToggle("Qb AB Enabled", _G.HubConfig.QBAim, "Enabled")
+QbABTab:AddToggle("Team Filter", _G.HubConfig.QBAim, "TeamFilter")
+QbABTab:AddToggle("Show Arc", _G.HubConfig.QBAim, "ShowArc")
+QbABTab:AddToggle("Safe Arc", _G.HubConfig.QBAim, "SafeArc")
+QbABTab:AddToggle("Target Highlight", _G.HubConfig.QBAim, "TargetHighlight")
+QbABTab:AddValueChanger("Lead Adjust", _G.HubConfig.QBAim, "LeadDelay")
+QbABTab:AddValueChanger("Peak Height", _G.HubConfig.QBAim, "PeakHeight")
+QbABTab:AddValueChanger("XYZ Drift", _G.HubConfig.QBAim, "QBDrift")
+QbABTab:AddKeybinder("Lock WR", _G.HubConfig.QBAim, "LockKeybind", nil, false, true, function()
+    qbTargetPlayer = getBestQBTarget()
+end)
+QbABTab:AddKeybinder("Throw Ball", _G.HubConfig.QBAim, "ThrowKeybind", nil, false, true, function()
+    executeQBThrow()
+end)
+QbABTab:AddKeybinder("Toggle Qb AB", _G.HubConfig.QBAim, "ToggleKeybind", qbEnableTgl)
+QbABTab:AddDivider()
+
+-- 2. Auto Stick Tab
 local AutoStickTab = CyberGUI:CreateTab("Auto Stick")
 local autoStickTgl = AutoStickTab:AddToggle("Auto Stick", _G.HubConfig.AutoStick, "Enabled")
 AutoStickTab:AddValueChanger("Activate Dist", _G.HubConfig.AutoStick, "ActivateDist")
@@ -1300,14 +1563,14 @@ AutoStickTab:AddValueChanger("Correction Speed", _G.HubConfig.AutoStick, "CorrSp
 AutoStickTab:AddKeybinder("Auto Stick", _G.HubConfig.AutoStick, "Keybind", autoStickTgl)
 AutoStickTab:AddDivider()
 
--- 2. Tap Bumper Tab
+-- 3. Tap Bumper Tab
 local TapBumperTab = CyberGUI:CreateTab("Tap Bumper")
 local tapBumperTgl = TapBumperTab:AddToggle("Tap Bumper", _G.HubConfig.TapBumper, "Enabled")
 TapBumperTab:AddValueChanger("Launch Force", _G.HubConfig.TapBumper, "Force")
 TapBumperTab:AddKeybinder("Tap Bumper", _G.HubConfig.TapBumper, "Keybind", nil, false, true, triggerTapBumperImpulse)
 TapBumperTab:AddDivider()
 
--- 3. Auto Rocket Tab
+-- 4. Auto Rocket Tab
 local AutoRocketTab = CyberGUI:CreateTab("Auto Rocket")
 local autoRocketTgl = AutoRocketTab:AddToggle("Auto Rocket", _G.HubConfig.AutoRocket, "Enabled")
 AutoRocketTab:AddToggle("Head Only Velocity", _G.HubConfig.AutoRocket, "HeadOnly")
@@ -1315,14 +1578,14 @@ AutoRocketTab:AddValueChanger("Dive Power", _G.HubConfig.AutoRocket, "Power")
 AutoRocketTab:AddKeybinder("Auto Rocket", _G.HubConfig.AutoRocket, "Keybind", autoRocketTgl)
 AutoRocketTab:AddDivider()
 
--- 4. Fling Tab
+-- 5. Fling Tab
 local FlingTab = CyberGUI:CreateTab("Fling")
 local flingTgl = FlingTab:AddToggle("Fling Active", _G.HubConfig.Fling, "Enabled")
 FlingTab:AddValueChanger("Fling Power", _G.HubConfig.Fling, "Power")
 FlingTab:AddKeybinder("Fling Action", _G.HubConfig.Fling, "Keybind", flingTgl, false, true, triggerFlingBoost)
 FlingTab:AddDivider()
 
--- 5. Sticky Tab (Hold Keybind)
+-- 6. Sticky Tab (Hold Keybind)
 local StickyTab = CyberGUI:CreateTab("Sticky")
 local stickyTgl = StickyTab:AddToggle("Sticky Head", _G.HubConfig.Sticky, "Enabled")
 StickyTab:AddValueChanger("Detection Range", _G.HubConfig.Sticky, "Range")
@@ -1331,7 +1594,7 @@ StickyTab:AddValueChanger("Strength", _G.HubConfig.Sticky, "Strength")
 StickyTab:AddKeybinder("Sticky Head", _G.HubConfig.Sticky, "Keybind", stickyTgl, true)
 StickyTab:AddDivider()
 
--- 6. BTP & Magnet Tab
+-- 7. BTP & Magnet Tab
 local MagnetTab = CyberGUI:CreateTab("BTP & Magnet")
 local magTgl = MagnetTab:AddToggle("uwu magnets", _G.HubConfig.uwuMagnets, "Enabled")
 MagnetTab:AddValueChanger("Magnet Power", _G.HubConfig.uwuMagnets, "Power")
@@ -1345,7 +1608,7 @@ MagnetTab:AddValueChanger("Catch Arm", _G.HubConfig.BTP, "CatchArm")
 MagnetTab:AddKeybinder("Ball TP", _G.HubConfig.BTP, "Keybind", btpTgl)
 MagnetTab:AddDivider()
 
--- 7. LegitPV Tab (Hold Keybind)
+-- 8. LegitPV Tab (Hold Keybind)
 local PVTab = CyberGUI:CreateTab("LegitPV")
 local pvTgl = PVTab:AddToggle("Pull Vector Assist", _G.HubConfig.LegitPV, "Enabled")
 PVTab:AddValueChanger("Pull Vector Strength", _G.HubConfig.LegitPV, "PullVec")
@@ -1353,7 +1616,7 @@ PVTab:AddValueChanger("Max Distance", _G.HubConfig.LegitPV, "MaxDist")
 PVTab:AddKeybinder("LegitPV", _G.HubConfig.LegitPV, "Keybind", pvTgl, true)
 PVTab:AddDivider()
 
--- 8. Tackle Reach Tab (NEW XYZ DIMENSION & WORKSPACE HOOK ENGINE)
+-- 9. Tackle Reach Tab
 local ReachTab = CyberGUI:CreateTab("Tackle Reach")
 local reachTgl = ReachTab:AddToggle("Tackle Reach", _G.HubConfig.TackleReach, "Enabled")
 ReachTab:AddValueChanger("Reach Size X", _G.HubConfig.TackleReach, "SizeX")
@@ -1363,8 +1626,12 @@ ReachTab:AddValueChanger("Transparency", _G.HubConfig.TackleReach, "Transparency
 ReachTab:AddKeybinder("Tackle Reach", _G.HubConfig.TackleReach, "Keybind", reachTgl)
 ReachTab:AddDivider()
 
--- 9. Movement Tab
+-- 10. Movement & Physics Tab
 local MoveTab = CyberGUI:CreateTab("Movement")
+local noOobTgl = MoveTab:AddToggle("NO OOB", _G.HubConfig.NoOOB, "Enabled")
+MoveTab:AddKeybinder("NO OOB", _G.HubConfig.NoOOB, "Keybind", noOobTgl)
+MoveTab:AddDivider()
+
 local speedTgl = MoveTab:AddToggle("Loop Speed", _G.HubConfig.Speed, "Enabled")
 MoveTab:AddValueChanger("Speed", _G.HubConfig.Speed, "SpeedVal")
 MoveTab:AddKeybinder("Loop Speed", _G.HubConfig.Speed, "Keybind", speedTgl)
@@ -1381,7 +1648,7 @@ MoveTab:AddValueChanger("Cooldown", _G.HubConfig.JP, "Cooldown")
 MoveTab:AddKeybinder("JP", _G.HubConfig.JP, "Keybind", jumpTgl)
 MoveTab:AddDivider()
 
--- 10. Visuals Tab
+-- 11. Visuals Tab
 local VisualsTab = CyberGUI:CreateTab("Visuals")
 local redSkyTgl = VisualsTab:AddToggle("Red Skybox", _G.HubConfig.RedSky, "Enabled")
 VisualsTab:AddValueChanger("Sky Brightness", _G.HubConfig.RedSky, "Brightness")
@@ -1392,7 +1659,7 @@ local potatoTgl = VisualsTab:AddToggle("potato graphics", _G.HubConfig.PotatoGra
 VisualsTab:AddKeybinder("potato graphics", _G.HubConfig.PotatoGraphics, "Keybind", potatoTgl)
 VisualsTab:AddDivider()
 
--- 11. Hitbox Expander Tab
+-- 12. Hitbox Expander Tab
 local HitboxTab = CyberGUI:CreateTab("Hitbox")
 local headTgl = HitboxTab:AddToggle("Head Hitbox", _G.HubConfig.HeadHitbox, "Enabled")
 HitboxTab:AddValueChanger("Head Size", _G.HubConfig.HeadHitbox, "HeadSize")
@@ -1400,12 +1667,24 @@ HitboxTab:AddValueChanger("Transparency", _G.HubConfig.HeadHitbox, "Transparency
 HitboxTab:AddKeybinder("Head Hitbox", _G.HubConfig.HeadHitbox, "Keybind", headTgl)
 HitboxTab:AddDivider()
 
--- 12. Misc Tab & Config Manager Engine
+-- 13. Misc Tab & Config Manager Engine
 local MiscTab = CyberGUI:CreateTab("Misc")
 
 MiscTab:AddKeybinder("Gui Toggle", _G.HubConfig.Misc, "Keybind", nil, false, true, function()
     MainFrame.Visible = not MainFrame.Visible
 end)
+MiscTab:AddDivider()
+
+-- HIDER FEATURE (EXCLUDES IVY_HUB_INTERFACE FROM BEING DESTROYED)
+local hiderTgl = MiscTab:AddToggle("Hider", _G.HubConfig.Misc, "Hider", function(state)
+    if state then
+        runHiderLogic()
+    elseif hiderConnection then
+        hiderConnection:Disconnect()
+        hiderConnection = nil
+    end
+end)
+MiscTab:AddKeybinder("Hider", _G.HubConfig.Misc, "HiderKeybind", hiderTgl)
 MiscTab:AddDivider()
 
 ----------------------------------------------------------------------------------
