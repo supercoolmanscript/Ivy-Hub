@@ -1,3 +1,10 @@
+-- ================================================================================
+-- IVY HUB V2 - COMPACT EDITION (NEW WORKSPACE TACKLE REACH ENGINE)
+-- Features: uwu magnets, Ball TP, Sticky Head, LegitPV, Advanced Tackle Reach (XYZ),
+--           Head Hitbox, Loop Speed, Gravity, JP, Auto Stick, Tap Bumper, Auto Rocket,
+--           Fling, Red Skybox, potato graphics & Advanced Config Engine
+-- ================================================================================
+
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
@@ -37,13 +44,15 @@ _G.HubConfig = _G.HubConfig or {
     BTP = { Enabled = false, MaxDist = 35, CatchArm = "RightHand", Keybind = Enum.KeyCode.E },
     Sticky = { Enabled = false, Range = 10, Smoothness = 12, Strength = 12, Keybind = Enum.KeyCode.Unknown },
     LegitPV = { Enabled = false, PullVec = 0.01, MaxDist = 25, Keybind = Enum.KeyCode.Unknown },
-    TackleReach = { Enabled = false, Distance = 22.2, Keybind = Enum.KeyCode.Unknown },
+    
+    -- Updated Tackle Reach Configuration
+    TackleReach = { Enabled = false, SizeX = 2.52, SizeY = 5.4, SizeZ = 1.41, Transparency = 0.7, Keybind = Enum.KeyCode.Unknown },
+    
     HeadHitbox = { Enabled = false, HeadSize = 3.0, Transparency = 0.5, Keybind = Enum.KeyCode.Unknown },
     Speed = { Enabled = false, SpeedVal = 22.2, Keybind = Enum.KeyCode.Unknown },
     Gravity = { Enabled = false, GravityVal = 178.4, Keybind = Enum.KeyCode.Unknown },
     JP = { Enabled = false, JumpPower = 50, Cooldown = 1.15, Keybind = Enum.KeyCode.Unknown },
     
-    -- Dedicated Features
     AutoStick = { Enabled = false, ActivateDist = 1.9, LockInDist = 5, MaxStrength = 55, OffsetY = 2.8, BalanceRadius = 3.75, VertMin = -4, VertMax = 4, CorrSpeed = 0.55, Keybind = Enum.KeyCode.Unknown },
     TapBumper = { Enabled = false, Force = 5000, Keybind = Enum.KeyCode.N },
     AutoRocket = { Enabled = false, HeadOnly = false, Power = 45, Keybind = Enum.KeyCode.Unknown },
@@ -431,25 +440,297 @@ RunService.Heartbeat:Connect(function()
 end)
 
 ----------------------------------------------------------------------------------
--- 6. TACKLE REACH
+-- 6. TACKLE REACH ENGINE (ADVANCED WORKSPACE HITBOX OVERRIDE SYSTEM)
 ----------------------------------------------------------------------------------
-RunService.Heartbeat:Connect(function()
-    if not _G.HubConfig.TackleReach.Enabled then return end
-    local char, rootPart = getChar()
-    if not char or not rootPart then return end
+local reachWatchers = setmetatable({}, {__mode = "k"})
+local reachOriginalParts = {
+    Transparency = setmetatable({}, {__mode = "k"}),
+    Size = setmetatable({}, {__mode = "k"})
+}
 
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character then
-            local grip = p.Character:FindFirstChild("FootballGrip", true)
-            local eHrp = p.Character:FindFirstChild("HumanoidRootPart")
-            if grip and eHrp then
-                local dist = (rootPart.Position - eHrp.Position).Magnitude
-                if dist <= (tonumber(_G.HubConfig.TackleReach.Distance) or 22.2) then
-                    rootPart.CFrame = CFrame.new(rootPart.Position, eHrp.Position)
+local defaultSizeX = 2.52
+local defaultSizeY = 5.4
+local defaultSizeZ = 1.41
+local defaultTransparency = 0.7
+
+local function safeDisconnectConns(t)
+    if not t then return end
+    for _, conn in ipairs(t) do
+        if conn and type(conn.Disconnect) == "function" then
+            pcall(function() conn:Disconnect() end)
+        end
+    end
+    table.clear(t)
+end
+
+local function getTargetReachSize()
+    local x = tonumber(_G.HubConfig.TackleReach.SizeX) or defaultSizeX
+    local y = tonumber(_G.HubConfig.TackleReach.SizeY) or defaultSizeY
+    local z = tonumber(_G.HubConfig.TackleReach.SizeZ) or defaultSizeZ
+    return Vector3.new(x, y, z)
+end
+
+local function getTargetReachTransparency()
+    return tonumber(_G.HubConfig.TackleReach.Transparency) or defaultTransparency
+end
+
+local function ensureReachWatcher(inst)
+    if not reachWatchers[inst] then
+        reachWatchers[inst] = {
+            cons = {},
+            parts = {},
+            partConns = setmetatable({}, {__mode = "k"}),
+            origT = setmetatable({}, {__mode = "k"}),
+            origS = setmetatable({}, {__mode = "k"}),
+            attached = false
+        }
+    end
+    return reachWatchers[inst]
+end
+
+local function applyReachVisuals(w, on)
+    if not w then return end
+    local targetSize = getTargetReachSize()
+    local targetTrans = getTargetReachTransparency()
+
+    for i = #w.parts, 1, -1 do
+        local part = w.parts[i]
+        if not (part and part.Parent) then
+            table.remove(w.parts, i)
+        elseif part:IsA("BasePart") then
+            if on then
+                if part.Transparency ~= targetTrans then
+                    part.Transparency = targetTrans
+                end
+                if part.Size ~= targetSize then
+                    part.Size = targetSize
+                end
+            else
+                if w.origT[part] ~= nil and part.Transparency ~= w.origT[part] then
+                    part.Transparency = w.origT[part]
+                end
+                if w.origS[part] ~= nil and part.Size ~= w.origS[part] then
+                    part.Size = w.origS[part]
                 end
             end
         end
     end
+end
+
+local function trackReachPart(w, part)
+    if not part:IsA("BasePart") then return end
+
+    if not table.find(w.parts, part) then
+        table.insert(w.parts, part)
+    end
+
+    if reachOriginalParts.Transparency[part] == nil then
+        reachOriginalParts.Transparency[part] = part.Transparency
+    end
+    if reachOriginalParts.Size[part] == nil then
+        reachOriginalParts.Size[part] = part.Size
+    end
+
+    w.origT[part] = reachOriginalParts.Transparency[part]
+    w.origS[part] = reachOriginalParts.Size[part]
+
+    if not w.partConns[part] then
+        w.partConns[part] = {}
+
+        table.insert(w.partConns[part], part:GetPropertyChangedSignal("Size"):Connect(function()
+            if _G.HubConfig.TackleReach.Enabled then
+                local sz = getTargetReachSize()
+                if part.Size ~= sz then part.Size = sz end
+            end
+        end))
+
+        table.insert(w.partConns[part], part:GetPropertyChangedSignal("Transparency"):Connect(function()
+            if _G.HubConfig.TackleReach.Enabled then
+                local tr = getTargetReachTransparency()
+                if part.Transparency ~= tr then part.Transparency = tr end
+            end
+        end))
+
+        table.insert(w.partConns[part], part.AncestryChanged:Connect(function(_, instParent)
+            if instParent == nil then
+                safeDisconnectConns(w.partConns[part])
+                w.partConns[part] = nil
+            end
+        end))
+    end
+
+    if _G.HubConfig.TackleReach.Enabled then
+        part.Transparency = getTargetReachTransparency()
+        part.Size = getTargetReachSize()
+    end
+end
+
+local function attachReachNode(node)
+    if not node then return end
+    local w = ensureReachWatcher(node)
+    if w.attached then
+        applyReachVisuals(w, _G.HubConfig.TackleReach.Enabled)
+        return
+    end
+
+    w.attached = true
+
+    for _, descendant in ipairs(node:GetDescendants()) do
+        if descendant:IsA("BasePart") then
+            trackReachPart(w, descendant)
+        end
+    end
+
+    if node:IsA("BasePart") then
+        trackReachPart(w, node)
+    end
+
+    table.insert(w.cons, node.DescendantAdded:Connect(function(descendant)
+        if descendant:IsA("BasePart") then
+            trackReachPart(w, descendant)
+        end
+    end))
+
+    table.insert(w.cons, node.AncestryChanged:Connect(function(_, instParent)
+        if instParent == nil then
+            applyReachVisuals(w, false)
+            for _, conns in pairs(w.partConns) do
+                safeDisconnectConns(conns)
+            end
+            w.partConns = setmetatable({}, {__mode = "k"})
+            safeDisconnectConns(w.cons)
+            reachWatchers[node] = nil
+        end
+    end))
+
+    applyReachVisuals(w, _G.HubConfig.TackleReach.Enabled)
+end
+
+local function hookHitboxesFolder(hitboxes)
+    if not hitboxes then return end
+    local w = ensureReachWatcher(hitboxes)
+    if w.attached then return end
+    w.attached = true
+
+    local myNode = hitboxes:FindFirstChild(LocalPlayer.Name)
+    if myNode then
+        attachReachNode(myNode)
+    end
+
+    table.insert(w.cons, hitboxes.ChildAdded:Connect(function(child)
+        if child.Name == LocalPlayer.Name then
+            attachReachNode(child)
+        end
+    end))
+
+    table.insert(w.cons, hitboxes.AncestryChanged:Connect(function(_, instParent)
+        if instParent == nil then
+            safeDisconnectConns(w.cons)
+            reachWatchers[hitboxes] = nil
+        end
+    end))
+end
+
+local function attachReachGameFolder(gameFolder)
+    if not gameFolder then return end
+    local w = ensureReachWatcher(gameFolder)
+    if w.attached then return end
+    w.attached = true
+
+    local replicated = gameFolder:FindFirstChild("Replicated")
+    local hitboxes = replicated and replicated:FindFirstChild("Hitboxes")
+    if hitboxes then hookHitboxesFolder(hitboxes) end
+
+    table.insert(w.cons, gameFolder.DescendantAdded:Connect(function(descendant)
+        if descendant:IsA("Folder") or descendant:IsA("Model") then
+            if descendant.Name == "Hitboxes" and descendant.Parent and descendant.Parent.Name == "Replicated" then
+                hookHitboxesFolder(descendant)
+            elseif descendant.Name == LocalPlayer.Name and descendant.Parent and descendant.Parent.Name == "Hitboxes" then
+                attachReachNode(descendant)
+            end
+        end
+    end))
+
+    table.insert(w.cons, gameFolder.AncestryChanged:Connect(function(_, instParent)
+        if instParent == nil then
+            safeDisconnectConns(w.cons)
+            reachWatchers[gameFolder] = nil
+        end
+    end))
+end
+
+local function attachReachMiniGameFolder(miniGameFolder)
+    if not miniGameFolder then return end
+    local w = ensureReachWatcher(miniGameFolder)
+    if w.attached then return end
+    w.attached = true
+
+    local replicated = miniGameFolder:FindFirstChild("Replicated")
+    local hitboxes = replicated and replicated:FindFirstChild("Hitboxes")
+    if hitboxes then hookHitboxesFolder(hitboxes) end
+
+    table.insert(w.cons, miniGameFolder.DescendantAdded:Connect(function(descendant)
+        if descendant:IsA("Folder") or descendant:IsA("Model") then
+            if descendant.Name == "Hitboxes" and descendant.Parent and descendant.Parent.Name == "Replicated" and descendant.Parent.Parent == miniGameFolder then
+                hookHitboxesFolder(descendant)
+            elseif descendant.Name == LocalPlayer.Name and descendant.Parent and descendant.Parent.Name == "Hitboxes" and descendant.Parent.Parent and descendant.Parent.Parent.Name == "Replicated" and descendant.Parent.Parent.Parent == miniGameFolder then
+                attachReachNode(descendant)
+            end
+        end
+    end))
+
+    table.insert(w.cons, miniGameFolder.AncestryChanged:Connect(function(_, instParent)
+        if instParent == nil then
+            safeDisconnectConns(w.cons)
+            reachWatchers[miniGameFolder] = nil
+        end
+    end))
+end
+
+local function updateAllReachWatchers()
+    for _, w in pairs(reachWatchers) do
+        if type(w) == "table" and w.parts then
+            applyReachVisuals(w, _G.HubConfig.TackleReach.Enabled)
+        end
+    end
+end
+
+local function scanReachWorkspace()
+    local games = Workspace:FindFirstChild("Games")
+    if games then
+        local w = ensureReachWatcher(games)
+        if not w.attached then
+            w.attached = true
+            table.insert(w.cons, games.ChildAdded:Connect(function(gFolder) attachReachGameFolder(gFolder) end))
+        end
+        for _, gFolder in ipairs(games:GetChildren()) do attachReachGameFolder(gFolder) end
+    end
+
+    local miniGames = Workspace:FindFirstChild("MiniGames")
+    if miniGames then
+        local w = ensureReachWatcher(miniGames)
+        if not w.attached then
+            w.attached = true
+            table.insert(w.cons, miniGames.ChildAdded:Connect(function(mgFolder) attachReachMiniGameFolder(mgFolder) end))
+        end
+        for _, mgFolder in ipairs(miniGames:GetChildren()) do attachReachMiniGameFolder(mgFolder) end
+    end
+end
+
+-- Initialize Workspace Watcher Loop for Tackle Reach
+task.spawn(function()
+    task.wait(0.5)
+    scanReachWorkspace()
+    Workspace.ChildAdded:Connect(function(child)
+        if child.Name == "Games" or child.Name == "MiniGames" then
+            task.defer(scanReachWorkspace)
+        end
+    end)
+end)
+
+-- Continuous state listener / refresh loop
+RunService.Heartbeat:Connect(function()
+    updateAllReachWatchers()
 end)
 
 ----------------------------------------------------------------------------------
@@ -561,7 +842,7 @@ local THEME = {
     InputBg = Color3.fromRGB(12, 24, 18)
 }
 
--- Compact Main Window Frame (Slimmer 400x270 dimensions)
+-- Compact Main Window Frame
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
 MainFrame.Size = UDim2.new(0, 400, 0, 270)
@@ -576,7 +857,7 @@ MainFrame.Parent = ScreenGui
 local MainCorner = Instance.new("UICorner", MainFrame)
 MainCorner.CornerRadius = UDim.new(0, 10)
 
--- Animated Moving Vine Background Canvas Engine (Scaled Down Leaves)
+-- Animated Moving Vine Background Canvas Engine
 local VineCanvas = Instance.new("Frame", MainFrame)
 VineCanvas.Name = "VineCanvas"
 VineCanvas.Size = UDim2.new(1, 0, 1, 0)
@@ -1079,10 +1360,13 @@ PVTab:AddValueChanger("Max Distance", _G.HubConfig.LegitPV, "MaxDist")
 PVTab:AddKeybinder("LegitPV", _G.HubConfig.LegitPV, "Keybind", pvTgl, true)
 PVTab:AddDivider()
 
--- 8. Tackle Reach Tab
+-- 8. Tackle Reach Tab (NEW XYZ DIMENSION & WORKSPACE HOOK ENGINE)
 local ReachTab = CyberGUI:CreateTab("Tackle Reach")
 local reachTgl = ReachTab:AddToggle("Tackle Reach", _G.HubConfig.TackleReach, "Enabled")
-ReachTab:AddValueChanger("Reach Distance", _G.HubConfig.TackleReach, "Distance")
+ReachTab:AddValueChanger("Reach Size X", _G.HubConfig.TackleReach, "SizeX")
+ReachTab:AddValueChanger("Reach Size Y", _G.HubConfig.TackleReach, "SizeY")
+ReachTab:AddValueChanger("Reach Size Z", _G.HubConfig.TackleReach, "SizeZ")
+ReachTab:AddValueChanger("Transparency", _G.HubConfig.TackleReach, "Transparency")
 ReachTab:AddKeybinder("Tackle Reach", _G.HubConfig.TackleReach, "Keybind", reachTgl)
 ReachTab:AddDivider()
 
