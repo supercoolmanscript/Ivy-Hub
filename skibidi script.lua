@@ -1,7 +1,7 @@
 -- ================================================================================
--- IVY HUB V2 - COMPACT EDITION (HIDER EXCEPTION & DISPLAY LAYER TOP INTEGRATION)
+-- IVY HUB V2 - COMPACT EDITION (CROZO RENDERSTEPPED HITBOX ENGINE INTEGRATED)
 -- Features: Qb AB, NO OOB, Hider, uwu magnets, Ball TP, Sticky Head, LegitPV, 
---           Advanced Tackle Reach (XYZ), Head Hitbox, Loop Speed, Gravity, JP, 
+--           Advanced Tackle Reach (XYZ), Hitbox Expander, Loop Speed, Gravity, JP, 
 --           Auto Stick, Tap Bumper, Auto Rocket, Fling, Red Skybox, potato graphics & Config Engine
 -- ================================================================================
 
@@ -282,7 +282,7 @@ do
 end
 
 -- ================================================================================
--- HIDER LOGIC ENGINE (PRESERVES IVY_HUB_INTERFACE)
+-- HIDER LOGIC ENGINE
 -- ================================================================================
 local hiderConnection = nil
 
@@ -346,14 +346,16 @@ RunService.Heartbeat:Connect(function()
 end)
 
 ----------------------------------------------------------------------------------
--- 2. STICKY HEAD MECHANIC (HOLD KEYBIND)
+-- 2. STICKY HEAD MECHANIC (HOLD KEYBIND - DYNAMIC HITBOX SWITCHING)
 ----------------------------------------------------------------------------------
 local stickyHeld = false
 
-local function getNearestEnemy(maxDist)
+local function getStickyTargetPos(maxDist)
     local char, hrp = getChar()
     if not hrp then return nil end
-    local bestTarget, bestDist = nil, maxDist or 9999
+    local bestPos, bestDist = nil, maxDist or 9999
+    local useHitbox = _G.HubConfig.HeadHitbox.Enabled
+
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character then
             local eHrp = p.Character:FindFirstChild("HumanoidRootPart")
@@ -362,12 +364,16 @@ local function getNearestEnemy(maxDist)
                 local d = (hrp.Position - eHrp.Position).Magnitude
                 if d < bestDist then
                     bestDist = d
-                    bestTarget = eHead
+                    if useHitbox then
+                        bestPos = eHrp.Position + Vector3.new(0, (eHrp.Size.Y / 2) + 2.5, 0)
+                    else
+                        bestPos = eHead.Position + Vector3.new(0, 2.5, 0)
+                    end
                 end
             end
         end
     end
-    return bestTarget
+    return bestPos
 end
 
 UserInputService.InputBegan:Connect(function(inp, gpe)
@@ -388,15 +394,15 @@ RunService.Heartbeat:Connect(function()
     local char, hrp = getChar()
     if not char or not hrp then return end
 
-    local targetHead = getNearestEnemy(tonumber(_G.HubConfig.Sticky.Range) or 10)
-    if targetHead then
+    local targetPos = getStickyTargetPos(tonumber(_G.HubConfig.Sticky.Range) or 10)
+    if targetPos then
         local smoothVal = math.clamp((tonumber(_G.HubConfig.Sticky.Smoothness) or 12) / 100, 0.01, 1)
-        hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(targetHead.Position + Vector3.new(0, 2.5, 0)), smoothVal)
+        hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(targetPos), smoothVal)
     end
 end)
 
 ----------------------------------------------------------------------------------
--- 3. AUTO STICK ENGINE
+-- 3. AUTO STICK ENGINE (DYNAMIC HITBOX SWITCHING)
 ----------------------------------------------------------------------------------
 local nudgeActive = false
 
@@ -405,54 +411,57 @@ RunService.Heartbeat:Connect(function()
     local char, hrp, hum = getChar()
     if not char or not hrp or not hum then return end
 
-    local function isTargetRising(headPart)
-        local charModel = headPart and headPart.Parent
-        if not charModel then return false end
-        local rootPart = charModel:FindFirstChild("HumanoidRootPart")
-        return rootPart and rootPart.AssemblyLinearVelocity.Y > 0.5
+    local function isTargetRising(targetHrp)
+        return targetHrp and targetHrp.AssemblyLinearVelocity.Y > 0.5
     end
 
     local function isLocalPlayerRising()
         return hrp.AssemblyLinearVelocity.Y > 0.5
     end
 
-    local function findClosestHead()
-        local closestHead, shortestDist = nil, math.huge
+    local function findClosestAutoStickTarget()
+        local closestChar, closestPos, shortestDist = nil, nil, math.huge
         local balRad = tonumber(_G.HubConfig.AutoStick.BalanceRadius) or 3.75
+        local useHitbox = _G.HubConfig.HeadHitbox.Enabled
+
         for _, op in pairs(Players:GetPlayers()) do
             if op ~= LocalPlayer and op.Character then
+                local eHrp = op.Character:FindFirstChild("HumanoidRootPart")
                 local eHead = op.Character:FindFirstChild("Head")
-                if eHead then
-                    local dist = (eHead.Position - hrp.Position).Magnitude
+                if eHrp and eHead then
+                    local basePos = useHitbox and (eHrp.Position + Vector3.new(0, eHrp.Size.Y / 2, 0)) or eHead.Position
+                    local dist = (basePos - hrp.Position).Magnitude
                     if dist < balRad and dist < shortestDist then
                         shortestDist = dist
-                        closestHead = eHead
+                        closestChar = op.Character
+                        closestPos = basePos
                     end
                 end
             end
         end
-        return closestHead
+        return closestChar, closestPos
     end
 
-    local head = findClosestHead()
-    local targetRising = head and isTargetRising(head)
+    local targetChar, targetPos = findClosestAutoStickTarget()
+    local targetHrp = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+    local targetRising = isTargetRising(targetHrp)
     local selfRising = isLocalPlayerRising()
     local bothRising = targetRising and selfRising
     local state = hum:GetState()
     local inAir = (state == Enum.HumanoidStateType.Freefall or state == Enum.HumanoidStateType.Jumping)
 
-    if inAir and bothRising then
+    if inAir and bothRising and targetPos then
         local actDist = tonumber(_G.HubConfig.AutoStick.ActivateDist) or 1.9
-        if head and (hrp.Position - head.Position).Magnitude < actDist then
+        if (hrp.Position - targetPos).Magnitude < actDist then
             local lockDist = tonumber(_G.HubConfig.AutoStick.LockInDist) or 5
-            local dist = (hrp.Position - head.Position).Magnitude
+            local dist = (hrp.Position - targetPos).Magnitude
             local lerpIntensity = (dist < lockDist) and 0.35 or 0.08
             local wagerOffsetY = tonumber(_G.HubConfig.AutoStick.OffsetY) or 2.8
-            local goalPos = head.Position + Vector3.new(0, wagerOffsetY, 0)
+            local goalPos = targetPos + Vector3.new(0, wagerOffsetY, 0)
             local direction = (goalPos - hrp.Position).Unit
             local maxStr = tonumber(_G.HubConfig.AutoStick.MaxStrength) or 55
             hrp.AssemblyLinearVelocity = hrp.AssemblyLinearVelocity:Lerp(direction * maxStr, lerpIntensity)
-            local lookGoal = CFrame.lookAt(hrp.Position, Vector3.new(head.Position.X, hrp.Position.Y, head.Position.Z))
+            local lookGoal = CFrame.lookAt(hrp.Position, Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z))
             hrp.CFrame = hrp.CFrame:Lerp(lookGoal, 0.15)
         end
     end
@@ -463,23 +472,23 @@ RunService.Heartbeat:Connect(function()
                 nudgeActive = false
             end
         end
-        if head and bothRising then
+        if targetPos and bothRising then
             local corrSpd = tonumber(_G.HubConfig.AutoStick.CorrSpeed) or 0.55
-            local targetPos = Vector3.new(head.Position.X + (math.random() - 0.5) * 0.15, hrp.Position.Y, head.Position.Z + (math.random() - 0.5) * 0.15)
-            local newPos = hrp.Position:Lerp(targetPos, corrSpd)
+            local goalPoint = Vector3.new(targetPos.X + (math.random() - 0.5) * 0.15, hrp.Position.Y, targetPos.Z + (math.random() - 0.5) * 0.15)
+            local newPos = hrp.Position:Lerp(goalPoint, corrSpd)
             hrp.CFrame = CFrame.new(newPos, newPos + hrp.CFrame.LookVector)
         end
-    elseif head and bothRising then
-        local verticalDiff = hrp.Position.Y - head.Position.Y
+    elseif targetPos and bothRising then
+        local verticalDiff = hrp.Position.Y - targetPos.Y
         local vMin = tonumber(_G.HubConfig.AutoStick.VertMin) or -4
         local vMax = tonumber(_G.HubConfig.AutoStick.VertMax) or 4
         if verticalDiff > vMin and verticalDiff < vMax then
             local wagerOffsetY = tonumber(_G.HubConfig.AutoStick.OffsetY) or 2.8
             local corrSpd = tonumber(_G.HubConfig.AutoStick.CorrSpeed) or 0.55
-            local targetPos = Vector3.new(head.Position.X + (math.random() - 0.5) * 0.15, head.Position.Y + wagerOffsetY, head.Position.Z + (math.random() - 0.5) * 0.15)
-            local newPos = hrp.Position:Lerp(targetPos, corrSpd)
+            local goalPoint = Vector3.new(targetPos.X + (math.random() - 0.5) * 0.15, targetPos.Y + wagerOffsetY, targetPos.Z + (math.random() - 0.5) * 0.15)
+            local newPos = hrp.Position:Lerp(goalPoint, corrSpd)
             hrp.CFrame = CFrame.new(newPos, newPos + hrp.CFrame.LookVector)
-            if Vector3.new(hrp.Position.X - head.Position.X, 0, hrp.Position.Z - head.Position.Z).Magnitude < 0.5 then
+            if Vector3.new(hrp.Position.X - targetPos.X, 0, hrp.Position.Z - targetPos.Z).Magnitude < 0.5 then
                 nudgeActive = true
             end
         else
@@ -967,20 +976,52 @@ RunService.Heartbeat:Connect(function()
 end)
 
 ----------------------------------------------------------------------------------
--- 9. HEAD HITBOX EXPANDER
+-- 9. CROZO HITBOX ENGINE (COLLIDABLE HUMANOIDROOTPART SYSTEM)
 ----------------------------------------------------------------------------------
-RunService.Heartbeat:Connect(function()
-    if not _G.HubConfig.HeadHitbox.Enabled then return end
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character then
-            local head = p.Character:FindFirstChild("Head")
-            if head then
-                local sz = tonumber(_G.HubConfig.HeadHitbox.HeadSize) or 3.0
-                head.Size = Vector3.new(sz, sz, sz)
-                head.Transparency = tonumber(_G.HubConfig.HeadHitbox.Transparency) or 0.5
-                head.Material = Enum.Material.Neon
-                head.CanCollide = false
+local originalHitboxProperties = {}
+
+RunService.RenderStepped:Connect(function()
+    if _G.HubConfig.HeadHitbox.Enabled then
+        local szVal = tonumber(_G.HubConfig.HeadHitbox.HeadSize) or 3.0
+        local transVal = tonumber(_G.HubConfig.HeadHitbox.Transparency) or 0.5
+        local targetSize = Vector3.new(szVal, szVal, szVal)
+
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer and p.Character then
+                local eHrp = p.Character:FindFirstChild("HumanoidRootPart")
+                if eHrp then
+                    if not originalHitboxProperties[eHrp] then
+                        originalHitboxProperties[eHrp] = {
+                            Size = eHrp.Size,
+                            Transparency = eHrp.Transparency,
+                            CanCollide = eHrp.CanCollide
+                        }
+                    end
+
+                    if eHrp.Size ~= targetSize then
+                        eHrp.Size = targetSize
+                    end
+                    if eHrp.Transparency ~= transVal then
+                        eHrp.Transparency = transVal
+                    end
+                    if eHrp.CanCollide ~= true then
+                        eHrp.CanCollide = true
+                    end
+                end
             end
+        end
+    else
+        if next(originalHitboxProperties) then
+            for hrp, props in pairs(originalHitboxProperties) do
+                if hrp and hrp.Parent then
+                    pcall(function()
+                        hrp.Size = props.Size
+                        hrp.Transparency = props.Transparency
+                        hrp.CanCollide = props.CanCollide
+                    end)
+                end
+            end
+            table.clear(originalHitboxProperties)
         end
     end
 end)
@@ -1104,7 +1145,7 @@ local function SpawnMovingVineLeaf()
     local Leaf = Instance.new("TextLabel", VineCanvas)
     Leaf.Size = UDim2.new(0, 14, 0, 14)
     Leaf.Position = UDim2.new(math.random(), 0, 1, 10)
-    Leaf.Text = "🌿"
+    Leaf.Text = "🍃"
     Leaf.TextSize = math.random(8, 12)
     Leaf.BackgroundTransparency = 1
     Leaf.TextTransparency = 0.75
@@ -1169,7 +1210,7 @@ Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 8)
 local Title = Instance.new("TextLabel", Header)
 Title.Size = UDim2.new(0, 200, 1, 0)
 Title.Position = UDim2.new(0, 10, 0, 0)
-Title.Text = "🌿 IVY <font color=\"rgb(50, 220, 110)\">HUB</font> <font size=\"8\" color=\"rgb(140, 180, 155)\">V2</font>"
+Title.Text = "🍃 IVY <font color=\"rgb(50, 220, 110)\">HUB</font> <font size=\"8\" color=\"rgb(140, 180, 155)\">V2</font>"
 Title.RichText = true
 Title.TextColor3 = THEME.Text
 Title.TextSize = 12
@@ -1517,7 +1558,7 @@ function CyberGUI:CreateTab(tabName)
         local CenterDot = Instance.new("TextLabel", Divider)
         CenterDot.Size = UDim2.new(0, 10, 0, 10)
         CenterDot.Position = UDim2.new(0.5, -5, 0.5, -5)
-        CenterDot.Text = "🌿"
+        CenterDot.Text = "🍃"
         CenterDot.TextSize = 7
         CenterDot.BackgroundTransparency = 1
     end
@@ -1661,10 +1702,10 @@ VisualsTab:AddDivider()
 
 -- 12. Hitbox Expander Tab
 local HitboxTab = CyberGUI:CreateTab("Hitbox")
-local headTgl = HitboxTab:AddToggle("Head Hitbox", _G.HubConfig.HeadHitbox, "Enabled")
-HitboxTab:AddValueChanger("Head Size", _G.HubConfig.HeadHitbox, "HeadSize")
+local headTgl = HitboxTab:AddToggle("Hitbox Expander", _G.HubConfig.HeadHitbox, "Enabled")
+HitboxTab:AddValueChanger("Hitbox Size", _G.HubConfig.HeadHitbox, "HeadSize")
 HitboxTab:AddValueChanger("Transparency", _G.HubConfig.HeadHitbox, "Transparency")
-HitboxTab:AddKeybinder("Head Hitbox", _G.HubConfig.HeadHitbox, "Keybind", headTgl)
+HitboxTab:AddKeybinder("Hitbox Expander", _G.HubConfig.HeadHitbox, "Keybind", headTgl)
 HitboxTab:AddDivider()
 
 -- 13. Misc Tab & Config Manager Engine
@@ -1675,7 +1716,7 @@ MiscTab:AddKeybinder("Gui Toggle", _G.HubConfig.Misc, "Keybind", nil, false, tru
 end)
 MiscTab:AddDivider()
 
--- HIDER FEATURE (EXCLUDES IVY_HUB_INTERFACE FROM BEING DESTROYED)
+-- HIDER FEATURE
 local hiderTgl = MiscTab:AddToggle("Hider", _G.HubConfig.Misc, "Hider", function(state)
     if state then
         runHiderLogic()
@@ -1772,7 +1813,7 @@ local DropBtn = Instance.new("TextButton", DropCard)
 DropBtn.Size = UDim2.new(0, 85, 0, 15)
 DropBtn.Position = UDim2.new(1, -126, 0.5, -7)
 DropBtn.BackgroundColor3 = THEME.InputBg
-DropBtn.Text = "Choose... ▼"
+DropBtn.Text = "Choose... 🔻"
 DropBtn.TextColor3 = THEME.Accent
 DropBtn.Font = Enum.Font.GothamBold
 DropBtn.TextSize = 9
