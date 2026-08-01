@@ -1,8 +1,8 @@
 -- ================================================================================
--- IVY HUB V2 - COMPACT EDITION (CROZO RENDERSTEPPED HITBOX ENGINE INTEGRATED)
--- Features: Qb AB, NO OOB, Hider, uwu magnets, Ball TP, Sticky Head, LegitPV, 
---           Advanced Tackle Reach (XYZ), Hitbox Expander, Loop Speed, Gravity, JP, 
---           Auto Stick, Tap Bumper, Auto Rocket, Fling, Red Skybox, potato graphics & Config Engine
+-- IVY HUB V2 - COMPLETE AUDIO VISUALIZER BEAT EDITION
+-- Features: Smooth Ambient Beat Engine, Grounded Top-Dock Navigation,
+--           Collidable Crozo Engine, Dynamic Target Sticking, Complete QB Engine,
+--           Tackle Reach Hooks, Movement Overrides, Hider Engine & Config Manager
 -- ================================================================================
 
 local UserInputService = game:GetService("UserInputService")
@@ -18,7 +18,7 @@ local LocalPlayer = Players.LocalPlayer
 local CONFIG_FOLDER = "IvyHub_Configs"
 local AUTOLOAD_FILE = CONFIG_FOLDER .. "/autoload.txt"
 
--- Safe File Storage Directory
+-- Safe Storage Engine
 local function EnsureFolder()
     if makefolder and isfolder and not isfolder(CONFIG_FOLDER) then
         pcall(function() makefolder(CONFIG_FOLDER) end)
@@ -26,7 +26,7 @@ local function EnsureFolder()
 end
 EnsureFolder()
 
--- Safe GUI Parent Detection
+-- Safe Parent Detection
 local function GetSafeParent()
     if gethui then
         local success, hui = pcall(gethui)
@@ -41,7 +41,6 @@ end
 -- MASTER CONFIGURATION TABLE
 -- ================================================================================
 _G.HubConfig = _G.HubConfig or {
-    -- Qb AB Engine Configuration
     QBAim = {
         Enabled = false,
         TeamFilter = true,
@@ -55,10 +54,7 @@ _G.HubConfig = _G.HubConfig or {
         ThrowKeybind = Enum.KeyCode.T,
         ToggleKeybind = Enum.KeyCode.P
     },
-
-    -- Physics & Out Of Bounds Safety
     NoOOB = { Enabled = false, Keybind = Enum.KeyCode.Unknown },
-
     uwuMagnets = { Enabled = false, Power = 55, Range = 25, Keybind = Enum.KeyCode.F },
     BTP = { Enabled = false, MaxDist = 35, CatchArm = "RightHand", Keybind = Enum.KeyCode.E },
     Sticky = { Enabled = false, Range = 10, Smoothness = 12, Strength = 12, Keybind = Enum.KeyCode.Unknown },
@@ -68,12 +64,10 @@ _G.HubConfig = _G.HubConfig or {
     Speed = { Enabled = false, SpeedVal = 22.2, Keybind = Enum.KeyCode.Unknown },
     Gravity = { Enabled = false, GravityVal = 178.4, Keybind = Enum.KeyCode.Unknown },
     JP = { Enabled = false, JumpPower = 50, Cooldown = 1.15, Keybind = Enum.KeyCode.Unknown },
-    
     AutoStick = { Enabled = false, ActivateDist = 1.9, LockInDist = 5, MaxStrength = 55, OffsetY = 2.8, BalanceRadius = 3.75, VertMin = -4, VertMax = 4, CorrSpeed = 0.55, Keybind = Enum.KeyCode.Unknown },
     TapBumper = { Enabled = false, Force = 5000, Keybind = Enum.KeyCode.N },
     AutoRocket = { Enabled = false, HeadOnly = false, Power = 45, Keybind = Enum.KeyCode.Unknown },
     Fling = { Enabled = false, Power = 1000, Keybind = Enum.KeyCode.X },
-    
     RedSky = { Enabled = false, Brightness = 2, Keybind = Enum.KeyCode.Unknown },
     PotatoGraphics = { Enabled = false, Keybind = Enum.KeyCode.Unknown },
     Misc = { Keybind = Enum.KeyCode.RightShift, Hider = false, HiderKeybind = Enum.KeyCode.Unknown }
@@ -110,7 +104,7 @@ local function DeserializeConfig(jsonStr)
     end
 end
 
--- Destroy Existing GUI Instance
+-- Destroy Old GUI Instance
 local targetParent = GetSafeParent()
 local oldGui = targetParent:FindFirstChild("IVY_HUB_INTERFACE")
 if oldGui then oldGui:Destroy() end
@@ -136,7 +130,6 @@ local function findFootballPart()
     return nil
 end
 
--- Dive Animation Detector
 local function isPlayerDiving(hum)
     if not hum then return false end
     local active = false
@@ -150,23 +143,10 @@ local function isPlayerDiving(hum)
                 return
             end
         end
-        local animator = hum:FindFirstChildOfClass("Animator")
-        if animator then
-            for _, track in ipairs(animator:GetPlayingAnimationTracks()) do
-                local name = tostring(track.Name):lower()
-                local anim = track.Animation
-                local animId = anim and tostring(anim.AnimationId):lower() or ""
-                if name:find("dive") or name:find("layout") or animId:find("dive") or animId:find("layout") then
-                    active = true
-                    return
-                end
-            end
-        end
     end)
     return active
 end
 
--- Impulse Force Helpers
 local function triggerFlingBoost()
     if not _G.HubConfig.Fling.Enabled then return end
     local char, hrp, hum = getChar()
@@ -178,7 +158,6 @@ local function triggerFlingBoost()
         flingBV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
         flingBV.Velocity = moveDir * pwr + Vector3.new(0, pwr * 0.3, 0)
         flingBV.Parent = hrp
-        
         task.delay(0.25, function()
             if flingBV and flingBV.Parent then flingBV:Destroy() end
         end)
@@ -201,7 +180,7 @@ local function triggerTapBumperImpulse()
 end
 
 -- ================================================================================
--- QB AB (QB AIM ENGINE CORE LOGIC & MATH MODULE)
+-- QB AB MATH MODULE
 -- ================================================================================
 local QBAimMathModule = {}
 do
@@ -210,9 +189,7 @@ do
     local defaultBallSpeed = 95
 
     local function flat(v) return Vector3.new(v.X, 0, v.Z) end
-    local function unit(v, fallback) return v.Magnitude < 1e-6 and (fallback or Vector3.new(1, 0, 0)) or v.Unit end
     local function clampMagnitude(v, maxMag) return (v and v.Magnitude > maxMag and maxMag > 0) and (v.Unit * maxMag) or (v or Vector3.zero) end
-    local function distXZ(a, b) return (flat(b) - flat(a)).Magnitude end
     local function ballAt(orig, vel, t) return orig + vel * t + 0.5 * gravityVector * t * t end
     local function landing(orig, vel)
         local disc = vel.Y * vel.Y + 2 * ballGravity * orig.Y
@@ -234,8 +211,6 @@ do
         local displacement = target - orig - inherited * t - 0.5 * gravityVector * t * t
         return displacement:Dot(displacement) - speed * speed * t * t
     end
-
-    function QBAimMathModule.ballAt(orig, vel, t) return ballAt(orig, vel, t) end
 
     function QBAimMathModule.solve(params)
         local speed = params.ballPower or defaultBallSpeed
@@ -285,7 +260,6 @@ end
 -- HIDER LOGIC ENGINE
 -- ================================================================================
 local hiderConnection = nil
-
 local function runHiderLogic()
     local hui = gethui and gethui() or game:GetService("CoreGui")
     if hui then
@@ -305,51 +279,35 @@ local function runHiderLogic()
 end
 
 -- ================================================================================
--- BACKEND MODULE LOGIC LOOPS
+-- BACKEND MODULE LOOPS
 -- ================================================================================
 
-----------------------------------------------------------------------------------
--- 1. LEGIT PULL VECTOR (HOLD KEYBIND MECHANIC)
-----------------------------------------------------------------------------------
+-- 1. LEGIT PV
 local pvHeld = false
-
 UserInputService.InputBegan:Connect(function(inp, gpe)
     if gpe then return end
     local isM1 = inp.UserInputType == Enum.UserInputType.MouseButton1
     local isR2 = inp.UserInputType == Enum.UserInputType.Gamepad1 and inp.KeyCode == Enum.KeyCode.ButtonR2
-    if isM1 or isR2 or inp.KeyCode == _G.HubConfig.LegitPV.Keybind then
-        pvHeld = true
-    end
+    if isM1 or isR2 or inp.KeyCode == _G.HubConfig.LegitPV.Keybind then pvHeld = true end
 end)
-
 UserInputService.InputEnded:Connect(function(inp, gpe)
     local isM1 = inp.UserInputType == Enum.UserInputType.MouseButton1
     local isR2 = inp.UserInputType == Enum.UserInputType.Gamepad1 and inp.KeyCode == Enum.KeyCode.ButtonR2
-    if isM1 or isR2 or inp.KeyCode == _G.HubConfig.LegitPV.Keybind then
-        pvHeld = false
-    end
+    if isM1 or isR2 or inp.KeyCode == _G.HubConfig.LegitPV.Keybind then pvHeld = false end
 end)
-
 RunService.Heartbeat:Connect(function()
     if not _G.HubConfig.LegitPV.Enabled or not pvHeld then return end
     local char, hrp = getChar()
     if not char or not hrp then return end
-
     local ball = findFootballPart()
-    if ball then
-        local dist = (hrp.Position - ball.Position).Magnitude
-        if dist <= (tonumber(_G.HubConfig.LegitPV.MaxDist) or 25) then
-            local pVec = tonumber(_G.HubConfig.LegitPV.PullVec) or 0.01
-            hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(hrp.Position, ball.Position), pVec)
-        end
+    if ball and (hrp.Position - ball.Position).Magnitude <= (tonumber(_G.HubConfig.LegitPV.MaxDist) or 25) then
+        local pVec = tonumber(_G.HubConfig.LegitPV.PullVec) or 0.01
+        hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(hrp.Position, ball.Position), pVec)
     end
 end)
 
-----------------------------------------------------------------------------------
--- 2. STICKY HEAD MECHANIC (HOLD KEYBIND - DYNAMIC HITBOX SWITCHING)
-----------------------------------------------------------------------------------
+-- 2. STICKY HEAD (DYNAMIC EXPANDED HITBOX SWITCHING)
 local stickyHeld = false
-
 local function getStickyTargetPos(maxDist)
     local char, hrp = getChar()
     if not hrp then return nil end
@@ -378,22 +336,15 @@ end
 
 UserInputService.InputBegan:Connect(function(inp, gpe)
     if gpe then return end
-    if inp.KeyCode == Enum.KeyCode.ButtonL1 or inp.KeyCode == _G.HubConfig.Sticky.Keybind then
-        stickyHeld = true
-    end
+    if inp.KeyCode == Enum.KeyCode.ButtonL1 or inp.KeyCode == _G.HubConfig.Sticky.Keybind then stickyHeld = true end
 end)
-
 UserInputService.InputEnded:Connect(function(inp, gpe)
-    if inp.KeyCode == Enum.KeyCode.ButtonL1 or inp.KeyCode == _G.HubConfig.Sticky.Keybind then
-        stickyHeld = false
-    end
+    if inp.KeyCode == Enum.KeyCode.ButtonL1 or inp.KeyCode == _G.HubConfig.Sticky.Keybind then stickyHeld = false end
 end)
-
 RunService.Heartbeat:Connect(function()
     if not _G.HubConfig.Sticky.Enabled or not stickyHeld then return end
     local char, hrp = getChar()
     if not char or not hrp then return end
-
     local targetPos = getStickyTargetPos(tonumber(_G.HubConfig.Sticky.Range) or 10)
     if targetPos then
         local smoothVal = math.clamp((tonumber(_G.HubConfig.Sticky.Smoothness) or 12) / 100, 0.01, 1)
@@ -401,11 +352,8 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
-----------------------------------------------------------------------------------
--- 3. AUTO STICK ENGINE (DYNAMIC HITBOX SWITCHING)
-----------------------------------------------------------------------------------
+-- 3. AUTO STICK ENGINE (DYNAMIC EXPANDED HITBOX SWITCHING)
 local nudgeActive = false
-
 RunService.Heartbeat:Connect(function()
     if not _G.HubConfig.AutoStick.Enabled then return end
     local char, hrp, hum = getChar()
@@ -468,9 +416,7 @@ RunService.Heartbeat:Connect(function()
 
     if nudgeActive then
         if not targetRising and not selfRising then
-            if (hum.MoveDirection.Magnitude > 0) or isPlayerDiving(hum) then
-                nudgeActive = false
-            end
+            if (hum.MoveDirection.Magnitude > 0) or isPlayerDiving(hum) then nudgeActive = false end
         end
         if targetPos and bothRising then
             local corrSpd = tonumber(_G.HubConfig.AutoStick.CorrSpeed) or 0.55
@@ -499,30 +445,23 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
-----------------------------------------------------------------------------------
--- 4. AUTO ROCKET ENGINE
-----------------------------------------------------------------------------------
+-- 4. AUTO ROCKET
 local currentDiveTime = 0
 local lastIsDiving = false
-
 RunService.Heartbeat:Connect(function(dt)
     if not _G.HubConfig.AutoRocket.Enabled then return end
     local char, hrp, hum = getChar()
     if not char or not hrp or not hum then return end
-
     local diving = isPlayerDiving(hum)
     if diving then
         if not lastIsDiving then currentDiveTime = 0 else currentDiveTime = currentDiveTime + dt end
         if currentDiveTime <= 0.4 then
             local moveDir = hum.MoveDirection.Magnitude > 0 and hum.MoveDirection or hrp.CFrame.LookVector
-            local rocketBV = hrp:FindFirstChild("IvyHub_AutoRocket")
-            if not rocketBV then
-                rocketBV = Instance.new("BodyVelocity")
-                rocketBV.Name = "IvyHub_AutoRocket"
-                rocketBV.MaxForce = Vector3.new(math.huge, 0, math.huge)
-                rocketBV.Parent = hrp
-            end
+            local rocketBV = hrp:FindFirstChild("IvyHub_AutoRocket") or Instance.new("BodyVelocity")
+            rocketBV.Name = "IvyHub_AutoRocket"
+            rocketBV.MaxForce = Vector3.new(math.huge, 0, math.huge)
             rocketBV.Velocity = moveDir * (tonumber(_G.HubConfig.AutoRocket.Power) or 45)
+            rocketBV.Parent = hrp
         else
             local rocketBV = hrp:FindFirstChild("IvyHub_AutoRocket")
             if rocketBV then rocketBV:Destroy() end
@@ -535,32 +474,21 @@ RunService.Heartbeat:Connect(function(dt)
     lastIsDiving = diving
 end)
 
-----------------------------------------------------------------------------------
--- 5. UWU MAGNETS & BALL TP (BTP)
-----------------------------------------------------------------------------------
+-- 5. UWU MAGNETS & BALL TP
 RunService.Heartbeat:Connect(function()
     local char, hrp = getChar()
     if not char or not hrp then return end
-
     if _G.HubConfig.uwuMagnets.Enabled then
         local ball = findFootballPart()
-        if ball then
-            local dist = (hrp.Position - ball.Position).Magnitude
-            local maxRange = tonumber(_G.HubConfig.uwuMagnets.Range) or 25
-            if dist <= maxRange then
-                local power = tonumber(_G.HubConfig.uwuMagnets.Power) or 55
-                local dir = (hrp.Position - ball.Position).Unit
-                ball.AssemblyLinearVelocity = dir * power
-            end
+        if ball and (hrp.Position - ball.Position).Magnitude <= (tonumber(_G.HubConfig.uwuMagnets.Range) or 25) then
+            ball.AssemblyLinearVelocity = (hrp.Position - ball.Position).Unit * (tonumber(_G.HubConfig.uwuMagnets.Power) or 55)
         end
     end
-
     if _G.HubConfig.BTP.Enabled then
         local ball = findFootballPart()
         if ball then
             local catchArm = char:FindFirstChild(_G.HubConfig.BTP.CatchArm) or hrp
-            local dist = (catchArm.Position - ball.Position).Magnitude
-            if dist <= (tonumber(_G.HubConfig.BTP.MaxDist) or 35) then
+            if (catchArm.Position - ball.Position).Magnitude <= (tonumber(_G.HubConfig.BTP.MaxDist) or 35) then
                 ball.CFrame = catchArm.CFrame
                 ball.AssemblyLinearVelocity = Vector3.zero
             end
@@ -568,332 +496,74 @@ RunService.Heartbeat:Connect(function()
     end
 end)
 
-----------------------------------------------------------------------------------
--- 6. TACKLE REACH ENGINE (ADVANCED WORKSPACE HITBOX OVERRIDE SYSTEM)
-----------------------------------------------------------------------------------
+-- 6. TACKLE REACH ENGINE
 local reachWatchers = setmetatable({}, {__mode = "k"})
-local reachOriginalParts = {
-    Transparency = setmetatable({}, {__mode = "k"}),
-    Size = setmetatable({}, {__mode = "k"})
-}
-
-local defaultSizeX = 2.52
-local defaultSizeY = 5.4
-local defaultSizeZ = 1.41
-local defaultTransparency = 0.7
-
-local function safeDisconnectConns(t)
-    if not t then return end
-    for _, conn in ipairs(t) do
-        if conn and type(conn.Disconnect) == "function" then
-            pcall(function() conn:Disconnect() end)
-        end
-    end
-    table.clear(t)
-end
-
+local reachOriginalParts = { Transparency = setmetatable({}, {__mode = "k"}), Size = setmetatable({}, {__mode = "k"}) }
 local function getTargetReachSize()
-    local x = tonumber(_G.HubConfig.TackleReach.SizeX) or defaultSizeX
-    local y = tonumber(_G.HubConfig.TackleReach.SizeY) or defaultSizeY
-    local z = tonumber(_G.HubConfig.TackleReach.SizeZ) or defaultSizeZ
-    return Vector3.new(x, y, z)
+    return Vector3.new(tonumber(_G.HubConfig.TackleReach.SizeX) or 2.52, tonumber(_G.HubConfig.TackleReach.SizeY) or 5.4, tonumber(_G.HubConfig.TackleReach.SizeZ) or 1.41)
 end
-
-local function getTargetReachTransparency()
-    return tonumber(_G.HubConfig.TackleReach.Transparency) or defaultTransparency
-end
-
-local function ensureReachWatcher(inst)
-    if not reachWatchers[inst] then
-        reachWatchers[inst] = {
-            cons = {},
-            parts = {},
-            partConns = setmetatable({}, {__mode = "k"}),
-            origT = setmetatable({}, {__mode = "k"}),
-            origS = setmetatable({}, {__mode = "k"}),
-            attached = false
-        }
-    end
-    return reachWatchers[inst]
-end
-
 local function applyReachVisuals(w, on)
     if not w then return end
     local targetSize = getTargetReachSize()
-    local targetTrans = getTargetReachTransparency()
-
+    local targetTrans = tonumber(_G.HubConfig.TackleReach.Transparency) or 0.7
     for i = #w.parts, 1, -1 do
         local part = w.parts[i]
-        if not (part and part.Parent) then
-            table.remove(w.parts, i)
-        elseif part:IsA("BasePart") then
+        if part and part.Parent and part:IsA("BasePart") then
             if on then
-                if part.Transparency ~= targetTrans then
-                    part.Transparency = targetTrans
-                end
-                if part.Size ~= targetSize then
-                    part.Size = targetSize
-                end
+                if part.Transparency ~= targetTrans then part.Transparency = targetTrans end
+                if part.Size ~= targetSize then part.Size = targetSize end
             else
-                if w.origT[part] ~= nil and part.Transparency ~= w.origT[part] then
-                    part.Transparency = w.origT[part]
-                end
-                if w.origS[part] ~= nil and part.Size ~= w.origS[part] then
-                    part.Size = w.origS[part]
-                end
+                if w.origT[part] and part.Transparency ~= w.origT[part] then part.Transparency = w.origT[part] end
+                if w.origS[part] and part.Size ~= w.origS[part] then part.Size = w.origS[part] end
             end
         end
     end
 end
-
 local function trackReachPart(w, part)
     if not part:IsA("BasePart") then return end
-
-    if not table.find(w.parts, part) then
-        table.insert(w.parts, part)
-    end
-
-    if reachOriginalParts.Transparency[part] == nil then
-        reachOriginalParts.Transparency[part] = part.Transparency
-    end
-    if reachOriginalParts.Size[part] == nil then
-        reachOriginalParts.Size[part] = part.Size
-    end
-
+    if not table.find(w.parts, part) then table.insert(w.parts, part) end
+    if reachOriginalParts.Transparency[part] == nil then reachOriginalParts.Transparency[part] = part.Transparency end
+    if reachOriginalParts.Size[part] == nil then reachOriginalParts.Size[part] = part.Size end
     w.origT[part] = reachOriginalParts.Transparency[part]
     w.origS[part] = reachOriginalParts.Size[part]
-
-    if not w.partConns[part] then
-        w.partConns[part] = {}
-
-        table.insert(w.partConns[part], part:GetPropertyChangedSignal("Size"):Connect(function()
-            if _G.HubConfig.TackleReach.Enabled then
-                local sz = getTargetReachSize()
-                if part.Size ~= sz then part.Size = sz end
-            end
-        end))
-
-        table.insert(w.partConns[part], part:GetPropertyChangedSignal("Transparency"):Connect(function()
-            if _G.HubConfig.TackleReach.Enabled then
-                local tr = getTargetReachTransparency()
-                if part.Transparency ~= tr then part.Transparency = tr end
-            end
-        end))
-
-        table.insert(w.partConns[part], part.AncestryChanged:Connect(function(_, instParent)
-            if instParent == nil then
-                safeDisconnectConns(w.partConns[part])
-                w.partConns[part] = nil
-            end
-        end))
-    end
-
     if _G.HubConfig.TackleReach.Enabled then
-        part.Transparency = getTargetReachTransparency()
+        part.Transparency = tonumber(_G.HubConfig.TackleReach.Transparency) or 0.7
         part.Size = getTargetReachSize()
     end
 end
-
 local function attachReachNode(node)
     if not node then return end
-    local w = ensureReachWatcher(node)
-    if w.attached then
-        applyReachVisuals(w, _G.HubConfig.TackleReach.Enabled)
-        return
-    end
-
+    local w = reachWatchers[node] or { cons = {}, parts = {}, origT = setmetatable({}, {__mode = "k"}), origS = setmetatable({}, {__mode = "k"}), attached = false }
+    reachWatchers[node] = w
+    if w.attached then applyReachVisuals(w, _G.HubConfig.TackleReach.Enabled) return end
     w.attached = true
-
-    for _, descendant in ipairs(node:GetDescendants()) do
-        if descendant:IsA("BasePart") then
-            trackReachPart(w, descendant)
-        end
-    end
-
-    if node:IsA("BasePart") then
-        trackReachPart(w, node)
-    end
-
-    table.insert(w.cons, node.DescendantAdded:Connect(function(descendant)
-        if descendant:IsA("BasePart") then
-            trackReachPart(w, descendant)
-        end
-    end))
-
-    table.insert(w.cons, node.AncestryChanged:Connect(function(_, instParent)
-        if instParent == nil then
-            applyReachVisuals(w, false)
-            for _, conns in pairs(w.partConns) do
-                safeDisconnectConns(conns)
-            end
-            w.partConns = setmetatable({}, {__mode = "k"})
-            safeDisconnectConns(w.cons)
-            reachWatchers[node] = nil
-        end
-    end))
-
+    for _, desc in ipairs(node:GetDescendants()) do if desc:IsA("BasePart") then trackReachPart(w, desc) end end
+    if node:IsA("BasePart") then trackReachPart(w, node) end
     applyReachVisuals(w, _G.HubConfig.TackleReach.Enabled)
 end
-
-local function hookHitboxesFolder(hitboxes)
-    if not hitboxes then return end
-    local w = ensureReachWatcher(hitboxes)
-    if w.attached then return end
-    w.attached = true
-
-    local myNode = hitboxes:FindFirstChild(LocalPlayer.Name)
-    if myNode then
-        attachReachNode(myNode)
-    end
-
-    table.insert(w.cons, hitboxes.ChildAdded:Connect(function(child)
-        if child.Name == LocalPlayer.Name then
-            attachReachNode(child)
-        end
-    end))
-
-    table.insert(w.cons, hitboxes.AncestryChanged:Connect(function(_, instParent)
-        if instParent == nil then
-            safeDisconnectConns(w.cons)
-            reachWatchers[hitboxes] = nil
-        end
-    end))
-end
-
-local function attachReachGameFolder(gameFolder)
-    if not gameFolder then return end
-    local w = ensureReachWatcher(gameFolder)
-    if w.attached then return end
-    w.attached = true
-
-    local replicated = gameFolder:FindFirstChild("Replicated")
-    local hitboxes = replicated and replicated:FindFirstChild("Hitboxes")
-    if hitboxes then hookHitboxesFolder(hitboxes) end
-
-    table.insert(w.cons, gameFolder.DescendantAdded:Connect(function(descendant)
-        if descendant:IsA("Folder") or descendant:IsA("Model") then
-            if descendant.Name == "Hitboxes" and descendant.Parent and descendant.Parent.Name == "Replicated" then
-                hookHitboxesFolder(descendant)
-            elseif descendant.Name == LocalPlayer.Name and descendant.Parent and descendant.Parent.Name == "Hitboxes" then
-                attachReachNode(descendant)
-            end
-        end
-    end))
-
-    table.insert(w.cons, gameFolder.AncestryChanged:Connect(function(_, instParent)
-        if instParent == nil then
-            safeDisconnectConns(w.cons)
-            reachWatchers[gameFolder] = nil
-        end
-    end))
-end
-
-local function attachReachMiniGameFolder(miniGameFolder)
-    if not miniGameFolder then return end
-    local w = ensureReachWatcher(miniGameFolder)
-    if w.attached then return end
-    w.attached = true
-
-    local replicated = miniGameFolder:FindFirstChild("Replicated")
-    local hitboxes = replicated and replicated:FindFirstChild("Hitboxes")
-    if hitboxes then hookHitboxesFolder(hitboxes) end
-
-    table.insert(w.cons, miniGameFolder.DescendantAdded:Connect(function(descendant)
-        if descendant:IsA("Folder") or descendant:IsA("Model") then
-            if descendant.Name == "Hitboxes" and descendant.Parent and descendant.Parent.Name == "Replicated" and descendant.Parent.Parent == miniGameFolder then
-                hookHitboxesFolder(descendant)
-            elseif descendant.Name == LocalPlayer.Name and descendant.Parent and descendant.Parent.Name == "Hitboxes" and descendant.Parent.Parent and descendant.Parent.Parent.Name == "Replicated" and descendant.Parent.Parent.Parent == miniGameFolder then
-                attachReachNode(descendant)
-            end
-        end
-    end))
-
-    table.insert(w.cons, miniGameFolder.AncestryChanged:Connect(function(_, instParent)
-        if instParent == nil then
-            safeDisconnectConns(w.cons)
-            reachWatchers[miniGameFolder] = nil
-        end
-    end))
-end
-
-local function updateAllReachWatchers()
-    for _, w in pairs(reachWatchers) do
-        if type(w) == "table" and w.parts then
-            applyReachVisuals(w, _G.HubConfig.TackleReach.Enabled)
-        end
-    end
-end
-
 local function scanReachWorkspace()
-    local games = Workspace:FindFirstChild("Games")
-    if games then
-        local w = ensureReachWatcher(games)
-        if not w.attached then
-            w.attached = true
-            table.insert(w.cons, games.ChildAdded:Connect(function(gFolder) attachReachGameFolder(gFolder) end))
-        end
-        for _, gFolder in ipairs(games:GetChildren()) do attachReachGameFolder(gFolder) end
-    end
-
-    local miniGames = Workspace:FindFirstChild("MiniGames")
-    if miniGames then
-        local w = ensureReachWatcher(miniGames)
-        if not w.attached then
-            w.attached = true
-            table.insert(w.cons, miniGames.ChildAdded:Connect(function(mgFolder) attachReachMiniGameFolder(mgFolder) end))
-        end
-        for _, mgFolder in ipairs(miniGames:GetChildren()) do attachReachMiniGameFolder(mgFolder) end
-    end
+    local games = Workspace:FindFirstChild("Games") or Workspace:FindFirstChild("MiniGames")
+    if games then for _, gFolder in ipairs(games:GetChildren()) do attachReachNode(gFolder) end end
 end
+task.spawn(function() task.wait(0.5) scanReachWorkspace() end)
+RunService.Heartbeat:Connect(function() for _, w in pairs(reachWatchers) do applyReachVisuals(w, _G.HubConfig.TackleReach.Enabled) end end)
 
--- Initialize Workspace Watcher Loop for Tackle Reach
-task.spawn(function()
-    task.wait(0.5)
-    scanReachWorkspace()
-    Workspace.ChildAdded:Connect(function(child)
-        if child.Name == "Games" or child.Name == "MiniGames" then
-            task.defer(scanReachWorkspace)
-        end
-    end)
-end)
-
--- Continuous state listener / refresh loop
-RunService.Heartbeat:Connect(function()
-    updateAllReachWatchers()
-end)
-
-----------------------------------------------------------------------------------
--- 7. QB AB TRACKING & TARGETING LOOPS
-----------------------------------------------------------------------------------
+-- 7. QB AB TRACKING
 local qbTargetPlayer = nil
-
 local function getBestQBTarget()
     local char, hrp = getChar()
     if not hrp then return nil end
     local camera = Workspace.CurrentCamera
     local mouse = LocalPlayer:GetMouse()
     local bestPlayer, bestDist = nil, math.huge
-
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character then
             local eHrp = p.Character:FindFirstChild("HumanoidRootPart")
             if eHrp and camera then
-                local sameTeam = false
-                pcall(function()
-                    local myTeam = LocalPlayer:FindFirstChild("Replicated") and LocalPlayer.Replicated:FindFirstChild("TeamID") and LocalPlayer.Replicated.TeamID.Value
-                    local pTeam = p:FindFirstChild("Replicated") and p.Replicated:FindFirstChild("TeamID") and p.Replicated.TeamID.Value
-                    if myTeam and pTeam and myTeam == pTeam then sameTeam = true end
-                end)
-
-                if not _G.HubConfig.QBAim.TeamFilter or sameTeam then
-                    local sPos, onScreen = camera:WorldToViewportPoint(eHrp.Position)
-                    if onScreen then
-                        local d = (Vector2.new(mouse.X, mouse.Y) - Vector2.new(sPos.X, sPos.Y)).Magnitude
-                        if d < bestDist then
-                            bestDist = d
-                            bestPlayer = p
-                        end
-                    end
+                local sPos, onScreen = camera:WorldToViewportPoint(eHrp.Position)
+                if onScreen then
+                    local d = (Vector2.new(mouse.X, mouse.Y) - Vector2.new(sPos.X, sPos.Y)).Magnitude
+                    if d < bestDist then bestDist = d bestPlayer = p end
                 end
             end
         end
@@ -909,77 +579,44 @@ local function executeQBThrow()
     if not hrp or not eHrp or not ball then return end
 
     local plan = QBAimMathModule.solve({
-        originPosition = ball.Position,
-        receiverPosition = eHrp.Position,
-        targetVelocity = eHrp.AssemblyLinearVelocity,
-        qbVelocity = hrp.AssemblyLinearVelocity,
-        ballPower = 95,
-        leadDelay = tonumber(_G.HubConfig.QBAim.LeadDelay) or 0.38,
+        originPosition = ball.Position, receiverPosition = eHrp.Position,
+        targetVelocity = eHrp.AssemblyLinearVelocity, qbVelocity = hrp.AssemblyLinearVelocity,
+        ballPower = 95, leadDelay = tonumber(_G.HubConfig.QBAim.LeadDelay) or 0.38,
         catchY = eHrp.Position.Y + (tonumber(_G.HubConfig.QBAim.PeakHeight) or 14.00)
     })
 
     if plan and plan.aimPoint then
-        local gameEv = nil
         pcall(function()
             for _, folder in ipairs({Workspace:FindFirstChild("Games"), ReplicatedStorage:FindFirstChild("Games")}) do
                 if folder then
                     for _, gameInst in ipairs(folder:GetChildren()) do
                         local re = gameInst:FindFirstChild("ReEvent") or (gameInst:FindFirstChild("Replicated") and gameInst.Replicated:FindFirstChild("ReEvent"))
-                        if re then gameEv = re break end
+                        if re then re:FireServer("Mechanics", "ThrowBall", { Target = plan.aimPoint, AutoThrow = false, Power = 100 }) break end
                     end
                 end
             end
         end)
-
-        if gameEv then
-            gameEv:FireServer("Mechanics", "ThrowBall", {
-                Target = plan.aimPoint,
-                AutoThrow = false,
-                Power = 100
-            })
-        end
     end
 end
 
-----------------------------------------------------------------------------------
--- 8. NO OOB (NO OUT OF BOUNDS) ENGINE
-----------------------------------------------------------------------------------
+-- 8. NO OOB
 RunService.Heartbeat:Connect(function()
     if not _G.HubConfig.NoOOB or not _G.HubConfig.NoOOB.Enabled then return end
-
     local ball = findFootballPart()
     local char, hrp = getChar()
     if not char or not hrp or not ball then return end
-
-    local isHolding = (ball.Position - hrp.Position).Magnitude <= 10 or ball:IsDescendantOf(char)
-    if not isHolding then return end
+    if (ball.Position - hrp.Position).Magnitude > 10 and not ball:IsDescendantOf(char) then return end
 
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj:IsA("BasePart") then
             local name = obj.Name:lower()
-            if name:find("oob") or name:find("outofbounds") or name:find("out_of_bounds") or name:find("sideline") or name:find("border") then
-                if obj.CanTouch then
-                    obj.CanTouch = false
-                end
-            end
-        end
-    end
-
-    local ray = Workspace:Raycast(hrp.Position + Vector3.new(0, 5, 0), Vector3.new(0, -20, 0))
-    if ray and ray.Instance then
-        local hitName = ray.Instance.Name:lower()
-        if hitName:find("oob") or hitName:find("out") or hitName:find("sideline") then
-            local pushDir = (Vector3.new(0, hrp.Position.Y, 0) - hrp.Position).Unit
-            hrp.AssemblyLinearVelocity = Vector3.new(pushDir.X * 15, hrp.AssemblyLinearVelocity.Y, pushDir.Z * 15)
+            if name:find("oob") or name:find("outofbounds") or name:find("sideline") then obj.CanTouch = false end
         end
     end
 end)
 
-----------------------------------------------------------------------------------
--- 9. CROZO HITBOX ENGINE (COLLIDABLE HUMANOIDROOTPART SYSTEM)
-----------------------------------------------------------------------------------
+-- 9. CROZO HITBOX ENGINE (COLLIDABLE HUMANOIDROOTPART OVERRIDE)
 local originalHitboxProperties = {}
-
 RunService.RenderStepped:Connect(function()
     if _G.HubConfig.HeadHitbox.Enabled then
         local szVal = tonumber(_G.HubConfig.HeadHitbox.HeadSize) or 3.0
@@ -991,22 +628,11 @@ RunService.RenderStepped:Connect(function()
                 local eHrp = p.Character:FindFirstChild("HumanoidRootPart")
                 if eHrp then
                     if not originalHitboxProperties[eHrp] then
-                        originalHitboxProperties[eHrp] = {
-                            Size = eHrp.Size,
-                            Transparency = eHrp.Transparency,
-                            CanCollide = eHrp.CanCollide
-                        }
+                        originalHitboxProperties[eHrp] = { Size = eHrp.Size, Transparency = eHrp.Transparency, CanCollide = eHrp.CanCollide }
                     end
-
-                    if eHrp.Size ~= targetSize then
-                        eHrp.Size = targetSize
-                    end
-                    if eHrp.Transparency ~= transVal then
-                        eHrp.Transparency = transVal
-                    end
-                    if eHrp.CanCollide ~= true then
-                        eHrp.CanCollide = true
-                    end
+                    if eHrp.Size ~= targetSize then eHrp.Size = targetSize end
+                    if eHrp.Transparency ~= transVal then eHrp.Transparency = transVal end
+                    if eHrp.CanCollide ~= true then eHrp.CanCollide = true end
                 end
             end
         end
@@ -1014,11 +640,7 @@ RunService.RenderStepped:Connect(function()
         if next(originalHitboxProperties) then
             for hrp, props in pairs(originalHitboxProperties) do
                 if hrp and hrp.Parent then
-                    pcall(function()
-                        hrp.Size = props.Size
-                        hrp.Transparency = props.Transparency
-                        hrp.CanCollide = props.CanCollide
-                    end)
+                    pcall(function() hrp.Size = props.Size hrp.Transparency = props.Transparency hrp.CanCollide = props.CanCollide end)
                 end
             end
             table.clear(originalHitboxProperties)
@@ -1026,16 +648,12 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
-----------------------------------------------------------------------------------
 -- 10. VISUALS & ENVIRONMENT
-----------------------------------------------------------------------------------
 task.spawn(function()
     while task.wait(1) do
         if _G.HubConfig.RedSky.Enabled then
             Lighting.Brightness = tonumber(_G.HubConfig.RedSky.Brightness) or 2
             Lighting.OutdoorAmbient = Color3.fromRGB(255, 30, 30)
-            Lighting.FogColor = Color3.fromRGB(150, 0, 0)
-            Lighting.FogEnd = 500
             local currentSky = Lighting:FindFirstChildOfClass("Sky")
             if not currentSky or currentSky.Name ~= "IvyRedSky" then
                 if currentSky then currentSky:Destroy() end
@@ -1050,51 +668,35 @@ task.spawn(function()
                 redSkyObj.Parent = Lighting
             end
         end
-
         if _G.HubConfig.PotatoGraphics.Enabled then
             for _, obj in ipairs(Workspace:GetDescendants()) do
-                if obj:IsA("BasePart") then
-                    obj.Material = Enum.Material.SmoothPlastic
-                elseif obj:IsA("Decal") or obj:IsA("Texture") then
-                    obj:Destroy()
-                end
+                if obj:IsA("BasePart") then obj.Material = Enum.Material.SmoothPlastic
+                elseif obj:IsA("Decal") or obj:IsA("Texture") then obj:Destroy() end
             end
         end
     end
 end)
 
-----------------------------------------------------------------------------------
--- 11. MOVEMENT & PHYSICAL OVERRIDES
-----------------------------------------------------------------------------------
+-- 11. MOVEMENT & PHYSICS
 local lastJumpTime = 0
-
 UserInputService.JumpRequest:Connect(function()
     if not _G.HubConfig.JP.Enabled then return end
     local char, hrp, hum = getChar()
     if not char or not hrp or not hum then return end
-    local cd = tonumber(_G.HubConfig.JP.Cooldown) or 1.15
-    if tick() - lastJumpTime >= cd then
+    if tick() - lastJumpTime >= (tonumber(_G.HubConfig.JP.Cooldown) or 1.15) then
         lastJumpTime = tick()
-        local jPower = tonumber(_G.HubConfig.JP.JumpPower) or 50
-        hrp.AssemblyLinearVelocity = Vector3.new(hrp.AssemblyLinearVelocity.X, jPower, hrp.AssemblyLinearVelocity.Z)
+        hrp.AssemblyLinearVelocity = Vector3.new(hrp.AssemblyLinearVelocity.X, tonumber(_G.HubConfig.JP.JumpPower) or 50, hrp.AssemblyLinearVelocity.Z)
     end
 end)
-
 RunService.Heartbeat:Connect(function()
     local char, hrp, hum = getChar()
     if not char or not hum then return end
-
-    if _G.HubConfig.Speed.Enabled then
-        hum.WalkSpeed = tonumber(_G.HubConfig.Speed.SpeedVal) or 22.2
-    end
-
-    if _G.HubConfig.Gravity.Enabled then
-        Workspace.Gravity = tonumber(_G.HubConfig.Gravity.GravityVal) or 178.4
-    end
+    if _G.HubConfig.Speed.Enabled then hum.WalkSpeed = tonumber(_G.HubConfig.Speed.SpeedVal) or 22.2 end
+    if _G.HubConfig.Gravity.Enabled then Workspace.Gravity = tonumber(_G.HubConfig.Gravity.GravityVal) or 178.4 end
 end)
 
 -- ================================================================================
--- IVY HUB COMPACT ORGANIC GUI FRAMEWORK (TOP-LAYER PRIORITY)
+-- IVY HUB COMPACT AUDIO VISUALIZER BEAT GUI FRAMEWORK
 -- ================================================================================
 
 local ScreenGui = Instance.new("ScreenGui")
@@ -1104,79 +706,69 @@ ScreenGui.DisplayOrder = 999999999
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
 local THEME = {
-    Bg = Color3.fromRGB(10, 15, 12),
-    Main = Color3.fromRGB(14, 22, 17),
-    Header = Color3.fromRGB(18, 30, 22),
-    Sidebar = Color3.fromRGB(11, 18, 14),
-    Card = Color3.fromRGB(18, 32, 24),
-    CardHover = Color3.fromRGB(24, 42, 31),
-    Accent = Color3.fromRGB(50, 220, 110),
-    Glow = Color3.fromRGB(0, 255, 140),
-    DarkVine = Color3.fromRGB(22, 70, 40),
-    Text = Color3.fromRGB(240, 250, 244),
-    SubText = Color3.fromRGB(140, 180, 155),
-    InputBg = Color3.fromRGB(12, 24, 18)
+    GlassBg = Color3.fromRGB(10, 16, 13),
+    HeaderBg = Color3.fromRGB(14, 24, 18),
+    DockBg = Color3.fromRGB(12, 20, 15),
+    CardBg = Color3.fromRGB(16, 30, 22),
+    AccentGlow = Color3.fromRGB(50, 230, 120),
+    MintGlow = Color3.fromRGB(110, 255, 170),
+    DarkVine = Color3.fromRGB(22, 65, 38),
+    TextMain = Color3.fromRGB(240, 255, 245),
+    TextSub = Color3.fromRGB(130, 180, 150),
+    InputBg = Color3.fromRGB(12, 22, 17)
 }
 
 -- Compact Main Window Frame
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 400, 0, 270)
-MainFrame.Position = UDim2.new(0.5, -200, 0.5, -135)
-MainFrame.BackgroundColor3 = THEME.Main
-MainFrame.BackgroundTransparency = 0.05
+MainFrame.Size = UDim2.new(0, 365, 0, 250)
+MainFrame.Position = UDim2.new(0.5, -182, 0.5, -125)
+MainFrame.BackgroundColor3 = THEME.GlassBg
+MainFrame.BackgroundTransparency = 0.1
 MainFrame.Active = true
 MainFrame.Draggable = true
-MainFrame.ClipsDescendants = true
+MainFrame.ClipsDescendants = false
 MainFrame.Parent = ScreenGui
 
-local MainCorner = Instance.new("UICorner", MainFrame)
-MainCorner.CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12)
 
--- Animated Moving Vine Background Canvas Engine
-local VineCanvas = Instance.new("Frame", MainFrame)
-VineCanvas.Name = "VineCanvas"
-VineCanvas.Size = UDim2.new(1, 0, 1, 0)
-VineCanvas.BackgroundTransparency = 1
-VineCanvas.ClipsDescendants = true
-VineCanvas.ZIndex = 0
+-- Animated Spore Background
+local ParticleCanvas = Instance.new("Frame", MainFrame)
+ParticleCanvas.Name = "ParticleCanvas"
+ParticleCanvas.Size = UDim2.new(1, 0, 1, 0)
+ParticleCanvas.BackgroundTransparency = 1
+ParticleCanvas.ClipsDescendants = true
+ParticleCanvas.ZIndex = 0
+Instance.new("UICorner", ParticleCanvas).CornerRadius = UDim.new(0, 12)
 
-local function SpawnMovingVineLeaf()
-    local Leaf = Instance.new("TextLabel", VineCanvas)
-    Leaf.Size = UDim2.new(0, 14, 0, 14)
-    Leaf.Position = UDim2.new(math.random(), 0, 1, 10)
-    Leaf.Text = "🍃"
-    Leaf.TextSize = math.random(8, 12)
-    Leaf.BackgroundTransparency = 1
-    Leaf.TextTransparency = 0.75
-    Leaf.Rotation = math.random(0, 360)
+local function SpawnBioSpores()
+    local Spore = Instance.new("Frame", ParticleCanvas)
+    Spore.Size = UDim2.new(0, math.random(2, 4), 0, math.random(2, 4))
+    Spore.Position = UDim2.new(math.random(), 0, 1, 5)
+    Spore.BackgroundColor3 = THEME.AccentGlow
+    Spore.BackgroundTransparency = 0.4
+    Instance.new("UICorner", Spore).CornerRadius = UDim.new(1, 0)
 
-    local speed = math.random(8, 15)
-    local swayAmplitude = math.random(10, 25)
-    local startX = Leaf.Position.X.Scale
+    local speed = math.random(10, 20)
+    local startX = Spore.Position.X.Scale
     local conn
-
     conn = RunService.RenderStepped:Connect(function(dt)
-        if not Leaf or not Leaf.Parent then conn:Disconnect() return end
-        local newY = Leaf.Position.Y.Scale - (dt * (speed / 100))
-        local sway = math.sin(tick() * 2 + speed) * (swayAmplitude / 1000)
-        Leaf.Position = UDim2.new(startX + sway, 0, newY, 0)
-        Leaf.Rotation = (Leaf.Rotation + dt * 25) % 360
-        if newY < -0.1 then
-            Leaf:Destroy()
-            conn:Disconnect()
-        end
+        if not Spore or not Spore.Parent then conn:Disconnect() return end
+        local newY = Spore.Position.Y.Scale - (dt * (speed / 100))
+        local sway = math.sin(tick() * 2 + speed) * 0.015
+        Spore.Position = UDim2.new(startX + sway, 0, newY, 0)
+        if newY < -0.1 then Spore:Destroy() conn:Disconnect() end
     end)
 end
 
 task.spawn(function()
     while MainFrame and MainFrame.Parent do
-        SpawnMovingVineLeaf()
-        task.wait(1.5)
+        SpawnBioSpores()
+        task.wait(1.0)
     end
 end)
 
--- Pulsating Glowing Vine Border
+-- Outer Beat Stroke & Gradient
 local MainStroke = Instance.new("UIStroke", MainFrame)
 MainStroke.Thickness = 2.0
 MainStroke.Transparency = 0.1
@@ -1184,210 +776,186 @@ MainStroke.Transparency = 0.1
 local VineGradient = Instance.new("UIGradient", MainStroke)
 VineGradient.Color = ColorSequence.new({
     ColorSequenceKeypoint.new(0, THEME.DarkVine),
-    ColorSequenceKeypoint.new(0.25, THEME.Accent),
-    ColorSequenceKeypoint.new(0.5, THEME.Glow),
-    ColorSequenceKeypoint.new(0.75, THEME.Accent),
+    ColorSequenceKeypoint.new(0.3, THEME.AccentGlow),
+    ColorSequenceKeypoint.new(0.6, THEME.MintGlow),
     ColorSequenceKeypoint.new(1, THEME.DarkVine)
 })
 VineGradient.Rotation = 45
 
-local step = 0
+-- AUDIO VISUALIZER SLOW AMBIENT BEAT ENGINE
+local beatTimer = 0
 RunService.RenderStepped:Connect(function(dt)
-    step = (step + dt * 0.4) % 1
-    VineGradient.Offset = Vector2.new(math.sin(step * math.pi * 2) * 0.5, math.cos(step * math.pi * 2) * 0.5)
-    VineGradient.Rotation = (VineGradient.Rotation + dt * 25) % 360
+    beatTimer = beatTimer + dt * 1.5 -- Slower tempo speed
+    local pulse = (math.sin(beatTimer) + 1) / 2 -- Smooth 0 to 1 wave
+    local beatVal = pulse^2.5 -- Natural rhythmic swell
+
+    MainStroke.Thickness = 1.5 + (beatVal * 2.5)
+    MainStroke.Transparency = 0.05 + (0.3 * (1 - beatVal))
+    VineGradient.Rotation = (VineGradient.Rotation + dt * 20) % 360
+
+    local bumpW = math.floor(beatVal * 3)
+    local bumpH = math.floor(beatVal * 2)
+    MainFrame.Size = UDim2.new(0, 365 + bumpW, 0, 250 + bumpH)
 end)
 
--- Compact Header Bar
+-- Header Bar
 local Header = Instance.new("Frame", MainFrame)
 Header.Name = "Header"
-Header.Size = UDim2.new(1, 0, 0, 30)
-Header.BackgroundColor3 = THEME.Header
-Header.BackgroundTransparency = 0.2
+Header.Size = UDim2.new(1, 0, 0, 28)
+Header.BackgroundColor3 = THEME.HeaderBg
+Header.BackgroundTransparency = 0.3
 Header.ZIndex = 2
-Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 8)
+Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 10)
 
 local Title = Instance.new("TextLabel", Header)
-Title.Size = UDim2.new(0, 200, 1, 0)
+Title.Size = UDim2.new(0, 180, 1, 0)
 Title.Position = UDim2.new(0, 10, 0, 0)
-Title.Text = "🍃 IVY <font color=\"rgb(50, 220, 110)\">HUB</font> <font size=\"8\" color=\"rgb(140, 180, 155)\">V2</font>"
+Title.Text = "🍃 IVY <font color=\"rgb(50, 230, 120)\">HUB</font>"
 Title.RichText = true
-Title.TextColor3 = THEME.Text
-Title.TextSize = 12
+Title.TextColor3 = THEME.TextMain
+Title.TextSize = 11
 Title.Font = Enum.Font.GothamBold
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.BackgroundTransparency = 1
 
--- Compact Sidebar Panel
-local Sidebar = Instance.new("Frame", MainFrame)
-Sidebar.Name = "Sidebar"
-Sidebar.Size = UDim2.new(0, 105, 1, -34)
-Sidebar.Position = UDim2.new(0, 0, 0, 34)
-Sidebar.BackgroundColor3 = THEME.Sidebar
-Sidebar.BackgroundTransparency = 0.4
-Sidebar.ZIndex = 2
-Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0, 6)
+-- STABILIZED GROUNDED TOP DOCK
+local TopDock = Instance.new("Frame", MainFrame)
+TopDock.Name = "TopDock"
+TopDock.Size = UDim2.new(1, -16, 0, 22)
+TopDock.Position = UDim2.new(0, 8, 0, 32)
+TopDock.BackgroundColor3 = THEME.DockBg
+TopDock.BackgroundTransparency = 0.4
+TopDock.ZIndex = 2
+Instance.new("UICorner", TopDock).CornerRadius = UDim.new(0, 6)
 
-local TabScroll = Instance.new("ScrollingFrame", Sidebar)
-TabScroll.Size = UDim2.new(1, -4, 1, -6)
-TabScroll.Position = UDim2.new(0, 2, 0, 3)
-TabScroll.BackgroundTransparency = 1
-TabScroll.ScrollBarThickness = 2
-TabScroll.ScrollBarImageColor3 = THEME.Accent
-TabScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+local DockScroll = Instance.new("ScrollingFrame", TopDock)
+DockScroll.Size = UDim2.new(1, -6, 1, 0)
+DockScroll.Position = UDim2.new(0, 3, 0, 0)
+DockScroll.BackgroundTransparency = 1
+DockScroll.ScrollBarThickness = 0
+DockScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+DockScroll.AutomaticCanvasSize = Enum.AutomaticSize.X
 
-local TabListLayout = Instance.new("UIListLayout", TabScroll)
-TabListLayout.Padding = UDim.new(0, 3)
-TabListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+local DockListLayout = Instance.new("UIListLayout", DockScroll)
+DockListLayout.FillDirection = Enum.FillDirection.Horizontal
+DockListLayout.Padding = UDim.new(0, 3)
+DockListLayout.VerticalAlignment = Enum.VerticalAlignment.Center
 
 local ContentArea = Instance.new("Frame", MainFrame)
 ContentArea.Name = "ContentArea"
-ContentArea.Size = UDim2.new(1, -112, 1, -38)
-ContentArea.Position = UDim2.new(0, 110, 0, 34)
+ContentArea.Size = UDim2.new(1, -16, 1, -62)
+ContentArea.Position = UDim2.new(0, 8, 0, 58)
 ContentArea.BackgroundTransparency = 1
 ContentArea.ZIndex = 2
 
 local CyberGUI = { Tabs = {}, KeybindRegistry = {}, RefreshCallbacks = {} }
 
--- Keybind Listener System
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
+-- Keybind Manager
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
     local code = input.KeyCode
     if code and code ~= Enum.KeyCode.Unknown then
-        for featureName, bindData in pairs(CyberGUI.KeybindRegistry) do
-            if bindData.Key == code then
-                if bindData.IsHold then
-                    if bindData.SetState then bindData.SetState(true) end
-                elseif bindData.IsAction then
-                    if bindData.Callback then bindData.Callback() end
-                elseif bindData.Callback then
-                    bindData.Callback()
-                end
+        for name, bind in pairs(CyberGUI.KeybindRegistry) do
+            if bind.Key == code then
+                if bind.IsHold and bind.SetState then bind.SetState(true)
+                elseif bind.Callback then bind.Callback() end
             end
         end
     end
 end)
 
-UserInputService.InputEnded:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
+UserInputService.InputEnded:Connect(function(input, gpe)
+    if gpe then return end
     local code = input.KeyCode
     if code and code ~= Enum.KeyCode.Unknown then
-        for featureName, bindData in pairs(CyberGUI.KeybindRegistry) do
-            if bindData.Key == code and bindData.IsHold then
-                if bindData.SetState then bindData.SetState(false) end
-            end
+        for name, bind in pairs(CyberGUI.KeybindRegistry) do
+            if bind.Key == code and bind.IsHold and bind.SetState then bind.SetState(false) end
         end
     end
 end)
 
-local function FormatKeyName(keyCode)
-    if not keyCode or typeof(keyCode) ~= "EnumItem" or keyCode == Enum.KeyCode.Unknown then
-        return "N/A"
-    end
-    return keyCode.Name:gsub("Button", ""):gsub("DPad", "DPad ")
+local function FormatKeyName(code)
+    if not code or code == Enum.KeyCode.Unknown then return "N/A" end
+    return code.Name:gsub("Button", ""):gsub("DPad", "")
 end
 
 function CyberGUI:RefreshAllUI()
-    for _, callback in ipairs(CyberGUI.RefreshCallbacks) do
-        pcall(callback)
-    end
+    for _, cb in ipairs(CyberGUI.RefreshCallbacks) do pcall(cb) end
 end
 
 function CyberGUI:CreateTab(tabName)
-    local TabButton = Instance.new("TextButton", TabScroll)
-    TabButton.Size = UDim2.new(0.94, 0, 0, 22)
-    TabButton.BackgroundColor3 = THEME.Card
-    TabButton.BackgroundTransparency = 0.5
-    TabButton.Text = "  " .. tabName
-    TabButton.TextColor3 = THEME.SubText
-    TabButton.Font = Enum.Font.GothamMedium
-    TabButton.TextSize = 9
-    TabButton.TextXAlignment = Enum.TextXAlignment.Left
-    Instance.new("UICorner", TabButton).CornerRadius = UDim.new(0, 4)
-
-    local Indicator = Instance.new("Frame", TabButton)
-    Indicator.Size = UDim2.new(0, 2, 0.6, 0)
-    Indicator.Position = UDim2.new(0, 2, 0.2, 0)
-    Indicator.BackgroundColor3 = THEME.Accent
-    Indicator.BackgroundTransparency = 1
-    Instance.new("UICorner", Indicator).CornerRadius = UDim.new(1, 0)
+    local DockButton = Instance.new("TextButton", DockScroll)
+    DockButton.Size = UDim2.new(0, 68, 0, 18)
+    DockButton.BackgroundColor3 = THEME.CardBg
+    DockButton.BackgroundTransparency = 0.6
+    DockButton.Text = tabName
+    DockButton.TextColor3 = THEME.TextSub
+    DockButton.Font = Enum.Font.GothamMedium
+    DockButton.TextSize = 8
+    Instance.new("UICorner", DockButton).CornerRadius = UDim.new(0, 4)
 
     local Container = Instance.new("ScrollingFrame", ContentArea)
     Container.Size = UDim2.new(1, 0, 1, 0)
     Container.BackgroundTransparency = 1
     Container.Visible = false
     Container.ScrollBarThickness = 2
-    Container.ScrollBarImageColor3 = THEME.Accent
+    Container.ScrollBarImageColor3 = THEME.AccentGlow
     Container.AutomaticCanvasSize = Enum.AutomaticSize.Y
 
     local ContainerList = Instance.new("UIListLayout", Container)
-    ContainerList.Padding = UDim.new(0, 4)
+    ContainerList.Padding = UDim.new(0, 3)
 
-    TabButton.MouseButton1Click:Connect(function()
+    DockButton.MouseButton1Click:Connect(function()
         for _, tab in pairs(CyberGUI.Tabs) do
-            tab.Button.BackgroundTransparency = 0.5
-            tab.Button.TextColor3 = THEME.SubText
-            tab.Indicator.BackgroundTransparency = 1
+            tab.Button.BackgroundTransparency = 0.6
+            tab.Button.TextColor3 = THEME.TextSub
             tab.Container.Visible = false
         end
-        TabButton.BackgroundTransparency = 0.1
-        TabButton.TextColor3 = THEME.Accent
-        Indicator.BackgroundTransparency = 0
+        DockButton.BackgroundTransparency = 0.1
+        DockButton.TextColor3 = THEME.AccentGlow
         Container.Visible = true
     end)
 
     if #CyberGUI.Tabs == 0 then
-        TabButton.BackgroundTransparency = 0.1
-        TabButton.TextColor3 = THEME.Accent
-        Indicator.BackgroundTransparency = 0
+        DockButton.BackgroundTransparency = 0.1
+        DockButton.TextColor3 = THEME.AccentGlow
         Container.Visible = true
     end
 
-    local TabObj = { Button = TabButton, Indicator = Indicator, Container = Container }
+    local TabObj = { Button = DockButton, Container = Container }
 
     function TabObj:AddToggle(labelName, configRef, configKey, onToggleCallback)
         local Card = Instance.new("Frame", Container)
-        Card.Size = UDim2.new(0.97, 0, 0, 25)
-        Card.BackgroundColor3 = THEME.Card
-        Card.BackgroundTransparency = 0.2
+        Card.Size = UDim2.new(0.98, 0, 0, 24)
+        Card.BackgroundColor3 = THEME.CardBg
+        Card.BackgroundTransparency = 0.3
         Instance.new("UICorner", Card).CornerRadius = UDim.new(0, 5)
-
-        local CardStroke = Instance.new("UIStroke", Card)
-        CardStroke.Color = THEME.DarkVine
-        CardStroke.Thickness = 1
 
         local Label = Instance.new("TextLabel", Card)
         Label.Size = UDim2.new(0.65, 0, 1, 0)
-        Label.Position = UDim2.new(0, 6, 0, 0)
+        Label.Position = UDim2.new(0, 8, 0, 0)
         Label.Text = labelName
-        Label.TextColor3 = THEME.Text
+        Label.TextColor3 = THEME.TextMain
         Label.Font = Enum.Font.GothamMedium
-        Label.TextSize = 9
+        Label.TextSize = 8
         Label.TextXAlignment = Enum.TextXAlignment.Left
         Label.BackgroundTransparency = 1
 
         local ToggleBtn = Instance.new("TextButton", Card)
-        ToggleBtn.Size = UDim2.new(0, 32, 0, 15)
-        ToggleBtn.Position = UDim2.new(1, -38, 0.5, -7)
+        ToggleBtn.Size = UDim2.new(0, 30, 0, 14)
+        ToggleBtn.Position = UDim2.new(1, -36, 0.5, -7)
         ToggleBtn.Text = ""
         Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(1, 0)
 
         local Knob = Instance.new("Frame", ToggleBtn)
-        Knob.Size = UDim2.new(0, 11, 0, 11)
+        Knob.Size = UDim2.new(0, 10, 0, 10)
         Knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
         Instance.new("UICorner", Knob).CornerRadius = UDim.new(1, 0)
 
         local function UpdateVisuals()
             local state = configRef[configKey] or false
-            TweenService:Create(ToggleBtn, TweenInfo.new(0.18), {
-                BackgroundColor3 = state and THEME.Accent or Color3.fromRGB(35, 50, 40)
-            }):Play()
-            TweenService:Create(Knob, TweenInfo.new(0.18), {
-                Position = state and UDim2.new(1, -13, 0.5, -5) or UDim2.new(0, 2, 0.5, -5)
-            }):Play()
-            TweenService:Create(CardStroke, TweenInfo.new(0.18), {
-                Color = state and THEME.Accent or THEME.DarkVine
-            }):Play()
+            TweenService:Create(ToggleBtn, TweenInfo.new(0.18), { BackgroundColor3 = state and THEME.AccentGlow or Color3.fromRGB(35, 55, 42) }):Play()
+            TweenService:Create(Knob, TweenInfo.new(0.18), { Position = state and UDim2.new(1, -12, 0.5, -5) or UDim2.new(0, 2, 0.5, -5) }):Play()
         end
 
         local function SetState(state)
@@ -1410,43 +978,35 @@ function CyberGUI:CreateTab(tabName)
 
     function TabObj:AddValueChanger(labelName, configRef, configKey)
         local Card = Instance.new("Frame", Container)
-        Card.Size = UDim2.new(0.97, 0, 0, 25)
-        Card.BackgroundColor3 = THEME.Card
-        Card.BackgroundTransparency = 0.2
+        Card.Size = UDim2.new(0.98, 0, 0, 24)
+        Card.BackgroundColor3 = THEME.CardBg
+        Card.BackgroundTransparency = 0.3
         Instance.new("UICorner", Card).CornerRadius = UDim.new(0, 5)
 
         local Label = Instance.new("TextLabel", Card)
-        Label.Size = UDim2.new(0, 115, 1, 0)
-        Label.Position = UDim2.new(0, 6, 0, 0)
+        Label.Size = UDim2.new(0, 140, 1, 0)
+        Label.Position = UDim2.new(0, 8, 0, 0)
         Label.Text = labelName
-        Label.TextColor3 = THEME.Text
+        Label.TextColor3 = THEME.TextMain
         Label.Font = Enum.Font.GothamMedium
-        Label.TextSize = 9
+        Label.TextSize = 8
         Label.TextXAlignment = Enum.TextXAlignment.Left
         Label.BackgroundTransparency = 1
 
         local InputBox = Instance.new("TextBox", Card)
-        InputBox.Size = UDim2.new(0, 55, 0, 15)
+        InputBox.Size = UDim2.new(0, 55, 0, 14)
         InputBox.Position = UDim2.new(1, -61, 0.5, -7)
         InputBox.BackgroundColor3 = THEME.InputBg
-        InputBox.TextColor3 = THEME.Accent
+        InputBox.TextColor3 = THEME.AccentGlow
         InputBox.Font = Enum.Font.GothamBold
-        InputBox.TextSize = 9
+        InputBox.TextSize = 8
         InputBox.ClearTextOnFocus = false
         Instance.new("UICorner", InputBox).CornerRadius = UDim.new(0, 3)
 
-        local function UpdateVisuals()
-            InputBox.Text = tostring(configRef[configKey] or "")
-        end
-
+        local function UpdateVisuals() InputBox.Text = tostring(configRef[configKey] or "") end
         local function UpdateValue()
-            local rawText = InputBox.Text
-            local num = tonumber(rawText)
-            if num then
-                configRef[configKey] = num
-            else
-                configRef[configKey] = rawText
-            end
+            local num = tonumber(InputBox.Text)
+            configRef[configKey] = num or InputBox.Text
         end
 
         InputBox:GetPropertyChangedSignal("Text"):Connect(UpdateValue)
@@ -1457,71 +1017,60 @@ function CyberGUI:CreateTab(tabName)
 
     function TabObj:AddKeybinder(featureName, configRef, configKey, toggleRef, isHold, isAction, actionCallback)
         local Card = Instance.new("Frame", Container)
-        Card.Size = UDim2.new(0.97, 0, 0, 25)
-        Card.BackgroundColor3 = THEME.Card
-        Card.BackgroundTransparency = 0.2
+        Card.Size = UDim2.new(0.98, 0, 0, 24)
+        Card.BackgroundColor3 = THEME.CardBg
+        Card.BackgroundTransparency = 0.3
         Instance.new("UICorner", Card).CornerRadius = UDim.new(0, 5)
 
         local Label = Instance.new("TextLabel", Card)
         Label.Size = UDim2.new(0.5, 0, 1, 0)
-        Label.Position = UDim2.new(0, 6, 0, 0)
+        Label.Position = UDim2.new(0, 8, 0, 0)
         Label.Text = featureName .. " Bind"
-        Label.TextColor3 = THEME.Text
+        Label.TextColor3 = THEME.TextMain
         Label.Font = Enum.Font.GothamMedium
-        Label.TextSize = 9
+        Label.TextSize = 8
         Label.TextXAlignment = Enum.TextXAlignment.Left
         Label.BackgroundTransparency = 1
 
         local BindBtn = Instance.new("TextButton", Card)
-        BindBtn.Size = UDim2.new(0, 45, 0, 15)
-        BindBtn.Position = UDim2.new(1, -66, 0.5, -7)
+        BindBtn.Size = UDim2.new(0, 42, 0, 14)
+        BindBtn.Position = UDim2.new(1, -64, 0.5, -7)
         BindBtn.BackgroundColor3 = THEME.InputBg
-        BindBtn.TextColor3 = THEME.Accent
+        BindBtn.TextColor3 = THEME.AccentGlow
         BindBtn.Font = Enum.Font.GothamBold
-        BindBtn.TextSize = 9
+        BindBtn.TextSize = 8
         Instance.new("UICorner", BindBtn).CornerRadius = UDim.new(0, 3)
 
         local ClearBtn = Instance.new("TextButton", Card)
-        ClearBtn.Size = UDim2.new(0, 15, 0, 15)
+        ClearBtn.Size = UDim2.new(0, 14, 0, 14)
         ClearBtn.Position = UDim2.new(1, -18, 0.5, -7)
-        ClearBtn.BackgroundColor3 = Color3.fromRGB(70, 25, 30)
+        ClearBtn.BackgroundColor3 = Color3.fromRGB(75, 25, 30)
         ClearBtn.Text = "X"
         ClearBtn.TextColor3 = Color3.fromRGB(255, 90, 90)
         ClearBtn.Font = Enum.Font.GothamBold
-        ClearBtn.TextSize = 9
+        ClearBtn.TextSize = 8
         Instance.new("UICorner", ClearBtn).CornerRadius = UDim.new(0, 3)
 
         local function UpdateVisuals()
             BindBtn.Text = FormatKeyName(configRef[configKey])
-            if CyberGUI.KeybindRegistry[featureName] then
-                CyberGUI.KeybindRegistry[featureName].Key = configRef[configKey]
-            end
+            if CyberGUI.KeybindRegistry[featureName] then CyberGUI.KeybindRegistry[featureName].Key = configRef[configKey] end
         end
 
         CyberGUI.KeybindRegistry[featureName] = {
-            Key = configRef[configKey],
-            IsHold = isHold or false,
-            IsAction = isAction or false,
+            Key = configRef[configKey], IsHold = isHold or false,
             Callback = function()
-                if isAction and actionCallback then
-                    actionCallback()
-                elseif toggleRef and toggleRef.Toggle then
-                    toggleRef.Toggle()
-                end
+                if isAction and actionCallback then actionCallback()
+                elseif toggleRef and toggleRef.Toggle then toggleRef.Toggle() end
             end,
-            SetState = function(state)
-                if toggleRef and toggleRef.SetState then toggleRef.SetState(state) end
-            end
+            SetState = function(state) if toggleRef and toggleRef.SetState then toggleRef.SetState(state) end end
         }
 
         BindBtn.MouseButton1Click:Connect(function()
             BindBtn.Text = "..."
-            BindBtn.TextColor3 = Color3.fromRGB(255, 200, 50)
             local conn
             conn = UserInputService.InputBegan:Connect(function(input)
-                local code = input.KeyCode
-                if code and code ~= Enum.KeyCode.Unknown then
-                    configRef[configKey] = code
+                if input.KeyCode ~= Enum.KeyCode.Unknown then
+                    configRef[configKey] = input.KeyCode
                     UpdateVisuals()
                     conn:Disconnect()
                 end
@@ -1539,7 +1088,7 @@ function CyberGUI:CreateTab(tabName)
 
     function TabObj:AddDivider()
         local Divider = Instance.new("Frame", Container)
-        Divider.Size = UDim2.new(0.97, 0, 0, 10)
+        Divider.Size = UDim2.new(0.98, 0, 0, 6)
         Divider.BackgroundTransparency = 1
 
         local Line = Instance.new("Frame", Divider)
@@ -1547,20 +1096,6 @@ function CyberGUI:CreateTab(tabName)
         Line.Position = UDim2.new(0, 10, 0.5, 0)
         Line.BackgroundColor3 = THEME.DarkVine
         Line.BorderSizePixel = 0
-
-        local LineGradient = Instance.new("UIGradient", Line)
-        LineGradient.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, Color3.fromRGB(14, 22, 17)),
-            ColorSequenceKeypoint.new(0.5, THEME.Accent),
-            ColorSequenceKeypoint.new(1, Color3.fromRGB(14, 22, 17))
-        })
-
-        local CenterDot = Instance.new("TextLabel", Divider)
-        CenterDot.Size = UDim2.new(0, 10, 0, 10)
-        CenterDot.Position = UDim2.new(0.5, -5, 0.5, -5)
-        CenterDot.Text = "🍃"
-        CenterDot.TextSize = 7
-        CenterDot.BackgroundTransparency = 1
     end
 
     table.insert(CyberGUI.Tabs, TabObj)
@@ -1581,14 +1116,9 @@ QbABTab:AddToggle("Target Highlight", _G.HubConfig.QBAim, "TargetHighlight")
 QbABTab:AddValueChanger("Lead Adjust", _G.HubConfig.QBAim, "LeadDelay")
 QbABTab:AddValueChanger("Peak Height", _G.HubConfig.QBAim, "PeakHeight")
 QbABTab:AddValueChanger("XYZ Drift", _G.HubConfig.QBAim, "QBDrift")
-QbABTab:AddKeybinder("Lock WR", _G.HubConfig.QBAim, "LockKeybind", nil, false, true, function()
-    qbTargetPlayer = getBestQBTarget()
-end)
-QbABTab:AddKeybinder("Throw Ball", _G.HubConfig.QBAim, "ThrowKeybind", nil, false, true, function()
-    executeQBThrow()
-end)
+QbABTab:AddKeybinder("Lock WR", _G.HubConfig.QBAim, "LockKeybind", nil, false, true, function() qbTargetPlayer = getBestQBTarget() end)
+QbABTab:AddKeybinder("Throw Ball", _G.HubConfig.QBAim, "ThrowKeybind", nil, false, true, executeQBThrow)
 QbABTab:AddKeybinder("Toggle Qb AB", _G.HubConfig.QBAim, "ToggleKeybind", qbEnableTgl)
-QbABTab:AddDivider()
 
 -- 2. Auto Stick Tab
 local AutoStickTab = CyberGUI:CreateTab("Auto Stick")
@@ -1602,14 +1132,12 @@ AutoStickTab:AddValueChanger("Vertical Min", _G.HubConfig.AutoStick, "VertMin")
 AutoStickTab:AddValueChanger("Vertical Max", _G.HubConfig.AutoStick, "VertMax")
 AutoStickTab:AddValueChanger("Correction Speed", _G.HubConfig.AutoStick, "CorrSpeed")
 AutoStickTab:AddKeybinder("Auto Stick", _G.HubConfig.AutoStick, "Keybind", autoStickTgl)
-AutoStickTab:AddDivider()
 
 -- 3. Tap Bumper Tab
 local TapBumperTab = CyberGUI:CreateTab("Tap Bumper")
 local tapBumperTgl = TapBumperTab:AddToggle("Tap Bumper", _G.HubConfig.TapBumper, "Enabled")
 TapBumperTab:AddValueChanger("Launch Force", _G.HubConfig.TapBumper, "Force")
 TapBumperTab:AddKeybinder("Tap Bumper", _G.HubConfig.TapBumper, "Keybind", nil, false, true, triggerTapBumperImpulse)
-TapBumperTab:AddDivider()
 
 -- 4. Auto Rocket Tab
 local AutoRocketTab = CyberGUI:CreateTab("Auto Rocket")
@@ -1617,119 +1145,99 @@ local autoRocketTgl = AutoRocketTab:AddToggle("Auto Rocket", _G.HubConfig.AutoRo
 AutoRocketTab:AddToggle("Head Only Velocity", _G.HubConfig.AutoRocket, "HeadOnly")
 AutoRocketTab:AddValueChanger("Dive Power", _G.HubConfig.AutoRocket, "Power")
 AutoRocketTab:AddKeybinder("Auto Rocket", _G.HubConfig.AutoRocket, "Keybind", autoRocketTgl)
-AutoRocketTab:AddDivider()
 
 -- 5. Fling Tab
 local FlingTab = CyberGUI:CreateTab("Fling")
 local flingTgl = FlingTab:AddToggle("Fling Active", _G.HubConfig.Fling, "Enabled")
 FlingTab:AddValueChanger("Fling Power", _G.HubConfig.Fling, "Power")
 FlingTab:AddKeybinder("Fling Action", _G.HubConfig.Fling, "Keybind", flingTgl, false, true, triggerFlingBoost)
-FlingTab:AddDivider()
 
--- 6. Sticky Tab (Hold Keybind)
+-- 6. Sticky Tab
 local StickyTab = CyberGUI:CreateTab("Sticky")
 local stickyTgl = StickyTab:AddToggle("Sticky Head", _G.HubConfig.Sticky, "Enabled")
 StickyTab:AddValueChanger("Detection Range", _G.HubConfig.Sticky, "Range")
 StickyTab:AddValueChanger("Smoothness", _G.HubConfig.Sticky, "Smoothness")
 StickyTab:AddValueChanger("Strength", _G.HubConfig.Sticky, "Strength")
 StickyTab:AddKeybinder("Sticky Head", _G.HubConfig.Sticky, "Keybind", stickyTgl, true)
-StickyTab:AddDivider()
 
--- 7. BTP & Magnet Tab
-local MagnetTab = CyberGUI:CreateTab("BTP & Magnet")
+-- 7. Magnet & TP Tab
+local MagnetTab = CyberGUI:CreateTab("Magnet & TP")
 local magTgl = MagnetTab:AddToggle("uwu magnets", _G.HubConfig.uwuMagnets, "Enabled")
 MagnetTab:AddValueChanger("Magnet Power", _G.HubConfig.uwuMagnets, "Power")
 MagnetTab:AddValueChanger("Magnet Range", _G.HubConfig.uwuMagnets, "Range")
 MagnetTab:AddKeybinder("uwu magnets", _G.HubConfig.uwuMagnets, "Keybind", magTgl)
 MagnetTab:AddDivider()
-
 local btpTgl = MagnetTab:AddToggle("Ball TP", _G.HubConfig.BTP, "Enabled")
 MagnetTab:AddValueChanger("Max Distance", _G.HubConfig.BTP, "MaxDist")
 MagnetTab:AddValueChanger("Catch Arm", _G.HubConfig.BTP, "CatchArm")
 MagnetTab:AddKeybinder("Ball TP", _G.HubConfig.BTP, "Keybind", btpTgl)
-MagnetTab:AddDivider()
 
--- 8. LegitPV Tab (Hold Keybind)
+-- 8. LegitPV Tab
 local PVTab = CyberGUI:CreateTab("LegitPV")
 local pvTgl = PVTab:AddToggle("Pull Vector Assist", _G.HubConfig.LegitPV, "Enabled")
 PVTab:AddValueChanger("Pull Vector Strength", _G.HubConfig.LegitPV, "PullVec")
 PVTab:AddValueChanger("Max Distance", _G.HubConfig.LegitPV, "MaxDist")
 PVTab:AddKeybinder("LegitPV", _G.HubConfig.LegitPV, "Keybind", pvTgl, true)
-PVTab:AddDivider()
 
 -- 9. Tackle Reach Tab
-local ReachTab = CyberGUI:CreateTab("Tackle Reach")
+local ReachTab = CyberGUI:CreateTab("Reach")
 local reachTgl = ReachTab:AddToggle("Tackle Reach", _G.HubConfig.TackleReach, "Enabled")
 ReachTab:AddValueChanger("Reach Size X", _G.HubConfig.TackleReach, "SizeX")
 ReachTab:AddValueChanger("Reach Size Y", _G.HubConfig.TackleReach, "SizeY")
 ReachTab:AddValueChanger("Reach Size Z", _G.HubConfig.TackleReach, "SizeZ")
 ReachTab:AddValueChanger("Transparency", _G.HubConfig.TackleReach, "Transparency")
 ReachTab:AddKeybinder("Tackle Reach", _G.HubConfig.TackleReach, "Keybind", reachTgl)
-ReachTab:AddDivider()
 
--- 10. Movement & Physics Tab
-local MoveTab = CyberGUI:CreateTab("Movement")
-local noOobTgl = MoveTab:AddToggle("NO OOB", _G.HubConfig.NoOOB, "Enabled")
-MoveTab:AddKeybinder("NO OOB", _G.HubConfig.NoOOB, "Keybind", noOobTgl)
-MoveTab:AddDivider()
-
-local speedTgl = MoveTab:AddToggle("Loop Speed", _G.HubConfig.Speed, "Enabled")
-MoveTab:AddValueChanger("Speed", _G.HubConfig.Speed, "SpeedVal")
-MoveTab:AddKeybinder("Loop Speed", _G.HubConfig.Speed, "Keybind", speedTgl)
-MoveTab:AddDivider()
-
-local gravTgl = MoveTab:AddToggle("Gravity", _G.HubConfig.Gravity, "Enabled")
-MoveTab:AddValueChanger("Gravity Value", _G.HubConfig.Gravity, "GravityVal")
-MoveTab:AddKeybinder("Gravity", _G.HubConfig.Gravity, "Keybind", gravTgl)
-MoveTab:AddDivider()
-
-local jumpTgl = MoveTab:AddToggle("JP", _G.HubConfig.JP, "Enabled")
-MoveTab:AddValueChanger("JP Power", _G.HubConfig.JP, "JumpPower")
-MoveTab:AddValueChanger("Cooldown", _G.HubConfig.JP, "Cooldown")
-MoveTab:AddKeybinder("JP", _G.HubConfig.JP, "Keybind", jumpTgl)
-MoveTab:AddDivider()
-
--- 11. Visuals Tab
-local VisualsTab = CyberGUI:CreateTab("Visuals")
-local redSkyTgl = VisualsTab:AddToggle("Red Skybox", _G.HubConfig.RedSky, "Enabled")
-VisualsTab:AddValueChanger("Sky Brightness", _G.HubConfig.RedSky, "Brightness")
-VisualsTab:AddKeybinder("Red Sky", _G.HubConfig.RedSky, "Keybind", redSkyTgl)
-VisualsTab:AddDivider()
-
-local potatoTgl = VisualsTab:AddToggle("potato graphics", _G.HubConfig.PotatoGraphics, "Enabled")
-VisualsTab:AddKeybinder("potato graphics", _G.HubConfig.PotatoGraphics, "Keybind", potatoTgl)
-VisualsTab:AddDivider()
-
--- 12. Hitbox Expander Tab
+-- 10. Hitbox Expander Tab
 local HitboxTab = CyberGUI:CreateTab("Hitbox")
 local headTgl = HitboxTab:AddToggle("Hitbox Expander", _G.HubConfig.HeadHitbox, "Enabled")
 HitboxTab:AddValueChanger("Hitbox Size", _G.HubConfig.HeadHitbox, "HeadSize")
 HitboxTab:AddValueChanger("Transparency", _G.HubConfig.HeadHitbox, "Transparency")
 HitboxTab:AddKeybinder("Hitbox Expander", _G.HubConfig.HeadHitbox, "Keybind", headTgl)
-HitboxTab:AddDivider()
 
--- 13. Misc Tab & Config Manager Engine
+-- 11. Movement Tab
+local MoveTab = CyberGUI:CreateTab("Movement")
+local noOobTgl = MoveTab:AddToggle("NO OOB", _G.HubConfig.NoOOB, "Enabled")
+MoveTab:AddKeybinder("NO OOB", _G.HubConfig.NoOOB, "Keybind", noOobTgl)
+MoveTab:AddDivider()
+local speedTgl = MoveTab:AddToggle("Loop Speed", _G.HubConfig.Speed, "Enabled")
+MoveTab:AddValueChanger("Speed Value", _G.HubConfig.Speed, "SpeedVal")
+MoveTab:AddKeybinder("Loop Speed", _G.HubConfig.Speed, "Keybind", speedTgl)
+MoveTab:AddDivider()
+local gravTgl = MoveTab:AddToggle("Gravity", _G.HubConfig.Gravity, "Enabled")
+MoveTab:AddValueChanger("Gravity Value", _G.HubConfig.Gravity, "GravityVal")
+MoveTab:AddKeybinder("Gravity", _G.HubConfig.Gravity, "Keybind", gravTgl)
+MoveTab:AddDivider()
+local jumpTgl = MoveTab:AddToggle("Jump Power", _G.HubConfig.JP, "Enabled")
+MoveTab:AddValueChanger("JP Value", _G.HubConfig.JP, "JumpPower")
+MoveTab:AddValueChanger("JP Cooldown", _G.HubConfig.JP, "Cooldown")
+MoveTab:AddKeybinder("JP", _G.HubConfig.JP, "Keybind", jumpTgl)
+
+-- 12. Visuals Tab
+local VisualsTab = CyberGUI:CreateTab("Visuals")
+local redSkyTgl = VisualsTab:AddToggle("Red Skybox", _G.HubConfig.RedSky, "Enabled")
+VisualsTab:AddValueChanger("Brightness", _G.HubConfig.RedSky, "Brightness")
+VisualsTab:AddKeybinder("Red Sky", _G.HubConfig.RedSky, "Keybind", redSkyTgl)
+VisualsTab:AddDivider()
+local potatoTgl = VisualsTab:AddToggle("potato graphics", _G.HubConfig.PotatoGraphics, "Enabled")
+VisualsTab:AddKeybinder("potato graphics", _G.HubConfig.PotatoGraphics, "Keybind", potatoTgl)
+
+-- 13. Misc & Config Tab
 local MiscTab = CyberGUI:CreateTab("Misc")
-
 MiscTab:AddKeybinder("Gui Toggle", _G.HubConfig.Misc, "Keybind", nil, false, true, function()
     MainFrame.Visible = not MainFrame.Visible
 end)
 MiscTab:AddDivider()
 
--- HIDER FEATURE
 local hiderTgl = MiscTab:AddToggle("Hider", _G.HubConfig.Misc, "Hider", function(state)
-    if state then
-        runHiderLogic()
-    elseif hiderConnection then
-        hiderConnection:Disconnect()
-        hiderConnection = nil
-    end
+    if state then runHiderLogic()
+    elseif hiderConnection then hiderConnection:Disconnect() hiderConnection = nil end
 end)
 MiscTab:AddKeybinder("Hider", _G.HubConfig.Misc, "HiderKeybind", hiderTgl)
 MiscTab:AddDivider()
 
 ----------------------------------------------------------------------------------
--- ADVANCED CONFIG SYSTEM UI
+-- ADVANCED CONFIG MANAGER SECTION
 ----------------------------------------------------------------------------------
 local currentConfigName = "default"
 
@@ -1740,9 +1248,7 @@ local function GetSavedConfigs()
             for _, filePath in ipairs(listfiles(CONFIG_FOLDER)) do
                 if filePath:sub(-5) == ".json" then
                     local fileName = filePath:match("([^/\\]+)%.json$")
-                    if fileName then
-                        table.insert(cfgs, fileName)
-                    end
+                    if fileName then table.insert(cfgs, fileName) end
                 end
             end
         end)
@@ -1761,80 +1267,78 @@ end
 
 -- 1. Editable Config Name Input Card
 local NameCard = Instance.new("Frame", MiscTab.Container)
-NameCard.Size = UDim2.new(0.97, 0, 0, 25)
-NameCard.BackgroundColor3 = THEME.Card
-NameCard.BackgroundTransparency = 0.2
+NameCard.Size = UDim2.new(0.98, 0, 0, 24)
+NameCard.BackgroundColor3 = THEME.CardBg
+NameCard.BackgroundTransparency = 0.3
 Instance.new("UICorner", NameCard).CornerRadius = UDim.new(0, 5)
 
 local NameLabel = Instance.new("TextLabel", NameCard)
-NameLabel.Size = UDim2.new(0, 95, 1, 0)
-NameLabel.Position = UDim2.new(0, 6, 0, 0)
+NameLabel.Size = UDim2.new(0, 90, 1, 0)
+NameLabel.Position = UDim2.new(0, 8, 0, 0)
 NameLabel.Text = "Config Name:"
-NameLabel.TextColor3 = THEME.Text
+NameLabel.TextColor3 = THEME.TextMain
 NameLabel.Font = Enum.Font.GothamMedium
-NameLabel.TextSize = 9
+NameLabel.TextSize = 8
 NameLabel.TextXAlignment = Enum.TextXAlignment.Left
 NameLabel.BackgroundTransparency = 1
 
 local ConfigInputBox = Instance.new("TextBox", NameCard)
-ConfigInputBox.Size = UDim2.new(0, 120, 0, 15)
-ConfigInputBox.Position = UDim2.new(1, -126, 0.5, -7)
+ConfigInputBox.Size = UDim2.new(0, 100, 0, 14)
+ConfigInputBox.Position = UDim2.new(1, -106, 0.5, -7)
 ConfigInputBox.BackgroundColor3 = THEME.InputBg
-ConfigInputBox.TextColor3 = THEME.Accent
+ConfigInputBox.TextColor3 = THEME.AccentGlow
 ConfigInputBox.Text = currentConfigName
 ConfigInputBox.Font = Enum.Font.GothamBold
-ConfigInputBox.TextSize = 9
+ConfigInputBox.TextSize = 8
 ConfigInputBox.ClearTextOnFocus = false
 Instance.new("UICorner", ConfigInputBox).CornerRadius = UDim.new(0, 3)
 
-ConfigInputBox:GetPropertyChangedSignal("Text"):Connect(function()
-    currentConfigName = ConfigInputBox.Text
-end)
+ConfigInputBox:GetPropertyChangedSignal("Text"):Connect(function() currentConfigName = ConfigInputBox.Text end)
 
 -- 2. Dropdown List Card
 local DropCard = Instance.new("Frame", MiscTab.Container)
-DropCard.Size = UDim2.new(0.97, 0, 0, 25)
-DropCard.BackgroundColor3 = THEME.Card
-DropCard.BackgroundTransparency = 0.2
+DropCard.Size = UDim2.new(0.98, 0, 0, 24)
+DropCard.BackgroundColor3 = THEME.CardBg
+DropCard.BackgroundTransparency = 0.3
 DropCard.ClipsDescendants = false
 Instance.new("UICorner", DropCard).CornerRadius = UDim.new(0, 5)
 
 local DropLabel = Instance.new("TextLabel", DropCard)
-DropLabel.Size = UDim2.new(0, 95, 1, 0)
-DropLabel.Position = UDim2.new(0, 6, 0, 0)
+DropLabel.Size = UDim2.new(0, 90, 1, 0)
+DropLabel.Position = UDim2.new(0, 8, 0, 0)
 DropLabel.Text = "Select File:"
-DropLabel.TextColor3 = THEME.Text
+DropLabel.TextColor3 = THEME.TextMain
 DropLabel.Font = Enum.Font.GothamMedium
-DropLabel.TextSize = 9
+DropLabel.TextSize = 8
 DropLabel.TextXAlignment = Enum.TextXAlignment.Left
 DropLabel.BackgroundTransparency = 1
 
 local DropBtn = Instance.new("TextButton", DropCard)
-DropBtn.Size = UDim2.new(0, 85, 0, 15)
-DropBtn.Position = UDim2.new(1, -126, 0.5, -7)
+DropBtn.Size = UDim2.new(0, 70, 0, 14)
+DropBtn.Position = UDim2.new(1, -106, 0.5, -7)
 DropBtn.BackgroundColor3 = THEME.InputBg
 DropBtn.Text = "Choose... 🔻"
-DropBtn.TextColor3 = THEME.Accent
+DropBtn.TextColor3 = THEME.AccentGlow
 DropBtn.Font = Enum.Font.GothamBold
-DropBtn.TextSize = 9
+DropBtn.TextSize = 8
 Instance.new("UICorner", DropBtn).CornerRadius = UDim.new(0, 3)
 
 local RefreshBtn = Instance.new("TextButton", DropCard)
-RefreshBtn.Size = UDim2.new(0, 30, 0, 15)
-RefreshBtn.Position = UDim2.new(1, -36, 0.5, -7)
+RefreshBtn.Size = UDim2.new(0, 28, 0, 14)
+RefreshBtn.Position = UDim2.new(1, -32, 0.5, -7)
 RefreshBtn.BackgroundColor3 = Color3.fromRGB(30, 60, 45)
 RefreshBtn.Text = "🔄"
-RefreshBtn.TextColor3 = THEME.Text
+RefreshBtn.TextColor3 = THEME.TextMain
 RefreshBtn.Font = Enum.Font.GothamBold
-RefreshBtn.TextSize = 9
+RefreshBtn.TextSize = 8
 Instance.new("UICorner", RefreshBtn).CornerRadius = UDim.new(0, 3)
 
 local DropContainer = Instance.new("ScrollingFrame", DropCard)
-DropContainer.Size = UDim2.new(0, 120, 0, 70)
-DropContainer.Position = UDim2.new(1, -126, 1, 2)
-DropContainer.BackgroundColor3 = THEME.Header
+DropContainer.Size = UDim2.new(0, 102, 0, 60)
+DropContainer.Position = UDim2.new(1, -106, 1, 2)
+DropContainer.BackgroundColor3 = THEME.HeaderBg
 DropContainer.BorderSizePixel = 1
-DropContainer.BorderColor3 = THEME.Accent
+DropContainer.BorderColor3 = THEME.AccentGlow
 DropContainer.Visible = false
 DropContainer.ZIndex = 10
 DropContainer.ScrollBarThickness = 2
@@ -1848,13 +1352,12 @@ local function PopulateDropdown()
     for _, child in ipairs(DropContainer:GetChildren()) do
         if child:IsA("TextButton") then child:Destroy() end
     end
-    local cfgs = GetSavedConfigs()
-    for _, name in ipairs(cfgs) do
+    for _, name in ipairs(GetSavedConfigs()) do
         local ItemBtn = Instance.new("TextButton", DropContainer)
-        ItemBtn.Size = UDim2.new(1, -4, 0, 16)
-        ItemBtn.BackgroundColor3 = THEME.Card
+        ItemBtn.Size = UDim2.new(1, -4, 0, 15)
+        ItemBtn.BackgroundColor3 = THEME.CardBg
         ItemBtn.Text = " " .. name
-        ItemBtn.TextColor3 = THEME.Text
+        ItemBtn.TextColor3 = THEME.TextMain
         ItemBtn.Font = Enum.Font.GothamMedium
         ItemBtn.TextSize = 8
         ItemBtn.TextXAlignment = Enum.TextXAlignment.Left
@@ -1873,13 +1376,12 @@ DropBtn.MouseButton1Click:Connect(function()
     PopulateDropdown()
     DropContainer.Visible = not DropContainer.Visible
 end)
-
 RefreshBtn.MouseButton1Click:Connect(PopulateDropdown)
 
 -- Status / Autoload Indicator Card
 local StatusCard = Instance.new("Frame", MiscTab.Container)
-StatusCard.Size = UDim2.new(0.97, 0, 0, 18)
-StatusCard.BackgroundColor3 = THEME.Card
+StatusCard.Size = UDim2.new(0.98, 0, 0, 16)
+StatusCard.BackgroundColor3 = THEME.CardBg
 StatusCard.BackgroundTransparency = 0.5
 Instance.new("UICorner", StatusCard).CornerRadius = UDim.new(0, 3)
 
@@ -1887,7 +1389,7 @@ local StatusLabel = Instance.new("TextLabel", StatusCard)
 StatusLabel.Size = UDim2.new(1, -10, 1, 0)
 StatusLabel.Position = UDim2.new(0, 5, 0, 0)
 StatusLabel.Text = "Autoloading: " .. GetCurrentAutoload()
-StatusLabel.TextColor3 = THEME.SubText
+StatusLabel.TextColor3 = THEME.TextSub
 StatusLabel.Font = Enum.Font.GothamMedium
 StatusLabel.TextSize = 8
 StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -1897,27 +1399,26 @@ local function UpdateAutoloadStatus()
     StatusLabel.Text = "Autoloading: " .. GetCurrentAutoload()
 end
 
--- Config Action Buttons Builder
+-- Config Action Buttons
 local function CreateActionButton(btnText, btnColor, callback)
     local Card = Instance.new("Frame", MiscTab.Container)
-    Card.Size = UDim2.new(0.97, 0, 0, 22)
-    Card.BackgroundColor3 = THEME.Card
-    Card.BackgroundTransparency = 0.2
+    Card.Size = UDim2.new(0.98, 0, 0, 20)
+    Card.BackgroundColor3 = THEME.CardBg
+    Card.BackgroundTransparency = 0.3
     Instance.new("UICorner", Card).CornerRadius = UDim.new(0, 5)
 
     local ActionBtn = Instance.new("TextButton", Card)
-    ActionBtn.Size = UDim2.new(1, -10, 1, -6)
-    ActionBtn.Position = UDim2.new(0, 5, 0, 3)
+    ActionBtn.Size = UDim2.new(1, -10, 1, -4)
+    ActionBtn.Position = UDim2.new(0, 5, 0, 2)
     ActionBtn.BackgroundColor3 = btnColor
     ActionBtn.Text = btnText
     ActionBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
     ActionBtn.Font = Enum.Font.GothamBold
-    ActionBtn.TextSize = 9
+    ActionBtn.TextSize = 8
     Instance.new("UICorner", ActionBtn).CornerRadius = UDim.new(0, 3)
     ActionBtn.MouseButton1Click:Connect(callback)
 end
 
--- Save Config
 CreateActionButton("Save Config", Color3.fromRGB(35, 110, 65), function()
     if writefile then
         local name = currentConfigName ~= "" and currentConfigName or "default"
@@ -1926,7 +1427,6 @@ CreateActionButton("Save Config", Color3.fromRGB(35, 110, 65), function()
     end
 end)
 
--- Load Config
 CreateActionButton("Load Config", Color3.fromRGB(40, 90, 150), function()
     if readfile and isfile then
         local name = currentConfigName ~= "" and currentConfigName or "default"
@@ -1938,7 +1438,6 @@ CreateActionButton("Load Config", Color3.fromRGB(40, 90, 150), function()
     end
 end)
 
--- Delete Config
 CreateActionButton("Delete Config", Color3.fromRGB(150, 45, 50), function()
     if delfile and isfile then
         local name = currentConfigName ~= "" and currentConfigName or "default"
@@ -1950,7 +1449,6 @@ CreateActionButton("Delete Config", Color3.fromRGB(150, 45, 50), function()
     end
 end)
 
--- Set as Autoload
 CreateActionButton("Set as Autoload", Color3.fromRGB(110, 85, 30), function()
     if writefile then
         local name = currentConfigName ~= "" and currentConfigName or "default"
@@ -1959,7 +1457,6 @@ CreateActionButton("Set as Autoload", Color3.fromRGB(110, 85, 30), function()
     end
 end)
 
--- Clear Autoload
 CreateActionButton("Clear Autoload", Color3.fromRGB(70, 70, 80), function()
     if delfile and isfile and isfile(AUTOLOAD_FILE) then
         delfile(AUTOLOAD_FILE)
@@ -1967,11 +1464,7 @@ CreateActionButton("Clear Autoload", Color3.fromRGB(70, 70, 80), function()
     end
 end)
 
-MiscTab:AddDivider()
-
--- ================================================================================
--- AUTOLOAD EXECUTION ON BOOT
--- ================================================================================
+-- Autoload Execution
 task.spawn(function()
     task.wait(0.2)
     if isfile and isfile(AUTOLOAD_FILE) and readfile then
