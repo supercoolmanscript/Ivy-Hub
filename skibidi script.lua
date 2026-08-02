@@ -1,9 +1,9 @@
 -- ================================================================================
--- IVY HUB V2 - COMPACT EDITION (STANDALONE PARITY AUTO ST ENGINE INTEGRATED)
+-- IVY HUB V2 - COMPACT EDITION (UNIVERSAL GAMEMODE AUTO ST ENGINE INTEGRATED)
 -- Features: Qb AB, NO OOB, Hider, uwu magnets, Ball TP, Sticky Head, LegitPV, 
 --           Advanced Tackle Reach (XYZ), Hitbox Expander, Loop Speed, Gravity, JP, 
 --           Auto Stick, Tap Bumper, Auto Rocket, Fling, Red Skybox, potato graphics,
---           Auto ST (Exact Standalone Right-Hand Perpendicular Engine) & Config Engine
+--           Auto ST (Universal Gamemode Trajectory & Shoulder Intercept Engine) & Config Engine
 -- ================================================================================
 
 local UserInputService = game:GetService("UserInputService")
@@ -129,16 +129,44 @@ local function getChar()
     return char, hrp, hum
 end
 
+-- ================================================================================
+-- UNIVERSAL GAMEMODE FOOTBALL DETECTOR ENGINE
+-- ================================================================================
 local function findFootballPart()
+    local char = LocalPlayer.Character
+    local bestMovingBall = nil
+    local fallbackBall = nil
+    local maxVel = -1
+
+    local function isFootballKeyword(str)
+        if not str then return false end
+        local s = str:lower()
+        return s:find("ball") or s:find("football") or s:find("handle") 
+            or s:find("swoosh") or s:find("pass") or s:find("throw")
+    end
+
+    -- Universal Workspace & Subfolder Search Logic (Supports Games, MiniGames, Matches, Field, etc.)
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj:IsA("BasePart") then
-            local name = obj.Name:lower()
-            if name:find("ball") or name:find("football") or name:find("handle") then
-                return obj
+            local pName = obj.Name
+            local parentName = obj.Parent and obj.Parent.Name or ""
+            
+            if isFootballKeyword(pName) or isFootballKeyword(parentName) then
+                -- Filter out balls attached to local player
+                if not (char and obj:IsDescendantOf(char)) then
+                    local vel = obj.AssemblyLinearVelocity.Magnitude
+                    if vel > 3 and vel > maxVel then
+                        maxVel = vel
+                        bestMovingBall = obj
+                    elseif not fallbackBall then
+                        fallbackBall = obj
+                    end
+                end
             end
         end
     end
-    return nil
+
+    return bestMovingBall or fallbackBall
 end
 
 -- Dive Animation Detector
@@ -407,13 +435,14 @@ RunService.Heartbeat:Connect(function()
 end)
 
 ----------------------------------------------------------------------------------
--- 3. AUTO ST ENGINE (EXACT STANDALONE LOGIC & KINEMATIC SOLVER)
+-- 3. AUTO ST ENGINE (DYNAMIC GAMEMODE GRAVITY & SHOULDER SOLVER)
 ----------------------------------------------------------------------------------
 local autoSTHeld = false
-local ST_GRAVITY_VEC = Vector3.new(0, -28, 0)
 
 local function getSTBallPosAtTime(p0, v0, t)
-    return p0 + (v0 * t) + (0.5 * ST_GRAVITY_VEC * (t * t))
+    local currentGravity = (Workspace.Gravity > 0) and Workspace.Gravity or 28
+    local gravityVec = Vector3.new(0, -currentGravity, 0)
+    return p0 + (v0 * t) + (0.5 * gravityVec * (t * t))
 end
 
 local function solveSTInterceptPoint(originPos, ballPos, ballVel)
@@ -1674,7 +1703,7 @@ end)
 QbABTab:AddKeybinder("Toggle Qb AB", _G.HubConfig.QBAim, "ToggleKeybind", qbEnableTgl)
 QbABTab:AddDivider()
 
--- 2. Auto ST Tab (Configured to mirror standalone hold-bind logic)
+-- 2. Auto ST Tab
 local AutoSTTab = CyberGUI:CreateTab("Auto ST")
 local autoSTTgl = AutoSTTab:AddToggle("Auto ST Active", _G.HubConfig.AutoST, "Enabled")
 AutoSTTab:AddValueChanger("Detection Range", _G.HubConfig.AutoST, "DetectionRange")
