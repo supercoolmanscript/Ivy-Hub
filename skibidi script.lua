@@ -1,3 +1,11 @@
+-- ================================================================================
+-- IVY HUB V2 - COMPACT EDITION (AUTO ST UNTOUCHED SNIPPET INTEGRATION)
+-- Features: QB Aim (Exact Source Math & Engine), Auto ST (100% Untouched Engine),
+--           NO OOB, Hider, uwu Magnets, Ball TP, Sticky Head, LegitPV, Advanced Tackle Reach,
+--           Hitbox Expander, Loop Speed, Gravity, JP, Auto Stick, Tap Bumper, Auto Rocket,
+--           Fling, Red Skybox, Potato Graphics, Config Manager
+-- ================================================================================
+
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
@@ -57,7 +65,7 @@ _G.HubConfig = _G.HubConfig or {
     Sticky = { Enabled = false, Range = 10, Smoothness = 12, Strength = 12, Keybind = Enum.KeyCode.Unknown },
     LegitPV = { Enabled = false, PullVec = 0.01, MaxDist = 25, Keybind = Enum.KeyCode.Unknown },
     
-    -- Standalone-Identical Auto ST Configuration
+    -- Standalone Auto ST Configuration
     AutoST = { Enabled = true, DetectionRange = 45, Smoothness = 25, Keybind = Enum.KeyCode.V },
     
     TackleReach = { Enabled = false, SizeX = 2.52, SizeY = 5.4, SizeZ = 1.41, Transparency = 0.7, Keybind = Enum.KeyCode.Unknown },
@@ -122,41 +130,18 @@ local function getChar()
 end
 
 -- ================================================================================
--- UNIVERSAL GAMEMODE FOOTBALL DETECTOR ENGINE
+-- UNTOUCHED FOOTBALL DETECTOR (EXACT SNIPPET LOGIC)
 -- ================================================================================
 local function findFootballPart()
-    local char = LocalPlayer.Character
-    local bestMovingBall = nil
-    local fallbackBall = nil
-    local maxVel = -1
-
-    local function isFootballKeyword(str)
-        if not str then return false end
-        local s = str:lower()
-        return s:find("ball") or s:find("football") or s:find("handle") 
-            or s:find("swoosh") or s:find("pass") or s:find("throw")
-    end
-
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj:IsA("BasePart") then
-            local pName = obj.Name
-            local parentName = obj.Parent and obj.Parent.Name or ""
-            
-            if isFootballKeyword(pName) or isFootballKeyword(parentName) then
-                if not (char and obj:IsDescendantOf(char)) then
-                    local vel = obj.AssemblyLinearVelocity.Magnitude
-                    if vel > 3 and vel > maxVel then
-                        maxVel = vel
-                        bestMovingBall = obj
-                    elseif not fallbackBall then
-                        fallbackBall = obj
-                    end
-                end
+            local name = obj.Name:lower()
+            if name:find("ball") or name:find("football") or name:find("handle") then
+                return obj
             end
         end
     end
-
-    return bestMovingBall or fallbackBall
+    return nil
 end
 
 -- Dive Animation Detector
@@ -592,7 +577,7 @@ UserInputService.InputBegan:Connect(function(inp, gpe)
     end
 end)
 
-UserInputService.InputEnded:Connect(function(inp, gpe)
+UserInputService.InputEnded:Connect(function(inp)
     local isM1 = inp.UserInputType == Enum.UserInputType.MouseButton1
     local isR2 = inp.UserInputType == Enum.UserInputType.Gamepad1 and inp.KeyCode == Enum.KeyCode.ButtonR2
     if isM1 or isR2 or inp.KeyCode == _G.HubConfig.LegitPV.Keybind then
@@ -653,7 +638,7 @@ UserInputService.InputBegan:Connect(function(inp, gpe)
     end
 end)
 
-UserInputService.InputEnded:Connect(function(inp, gpe)
+UserInputService.InputEnded:Connect(function(inp)
     if inp.KeyCode == Enum.KeyCode.ButtonL1 or inp.KeyCode == _G.HubConfig.Sticky.Keybind then
         stickyHeld = false
     end
@@ -672,22 +657,22 @@ RunService.Heartbeat:Connect(function()
 end)
 
 ----------------------------------------------------------------------------------
--- 3. AUTO ST ENGINE (DYNAMIC GAMEMODE GRAVITY & SHOULDER SOLVER)
+-- 3. UNTOUCHED AUTO ST CORE ENGINE (EXACT KINEMATIC SOLVER & ALIGNMENT)
 ----------------------------------------------------------------------------------
+local GRAVITY_VEC = Vector3.new(0, -28, 0)
 local autoSTHeld = false
+local autoSTTgl = nil
 
-local function getSTBallPosAtTime(p0, v0, t)
-    local currentGravity = (Workspace.Gravity > 0) and Workspace.Gravity or 28
-    local gravityVec = Vector3.new(0, -currentGravity, 0)
-    return p0 + (v0 * t) + (0.5 * gravityVec * (t * t))
+local function getBallPosAtTime(p0, v0, t)
+    return p0 + (v0 * t) + (0.5 * GRAVITY_VEC * (t * t))
 end
 
-local function solveSTInterceptPoint(originPos, ballPos, ballVel)
+local function solveInterceptPoint(originPos, ballPos, ballVel)
     local bestPoint = nil
     local minDistance = math.huge
     
     for t = 0.03, 1.2, 0.04 do
-        local predictedPos = getSTBallPosAtTime(ballPos, ballVel, t)
+        local predictedPos = getBallPosAtTime(ballPos, ballVel, t)
         local dist = (predictedPos - originPos).Magnitude
         
         if dist < minDistance then
@@ -699,16 +684,25 @@ local function solveSTInterceptPoint(originPos, ballPos, ballVel)
     return bestPoint
 end
 
+local function setHoldingState(state)
+    autoSTHeld = state
+    if autoSTTgl and autoSTTgl.SetState then
+        autoSTTgl.SetState(state)
+    end
+end
+
 UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
-    if input.KeyCode == _G.HubConfig.AutoST.Keybind or input.KeyCode == Enum.KeyCode.ButtonL2 then
-        autoSTHeld = true
+    local bind = _G.HubConfig.AutoST.Keybind
+    if (bind and bind ~= Enum.KeyCode.Unknown and input.KeyCode == bind) or input.KeyCode == Enum.KeyCode.ButtonL2 then
+        setHoldingState(true)
     end
 end)
 
-UserInputService.InputEnded:Connect(function(input, gpe)
-    if input.KeyCode == _G.HubConfig.AutoST.Keybind or input.KeyCode == Enum.KeyCode.ButtonL2 then
-        autoSTHeld = false
+UserInputService.InputEnded:Connect(function(input)
+    local bind = _G.HubConfig.AutoST.Keybind
+    if (bind and bind ~= Enum.KeyCode.Unknown and input.KeyCode == bind) or input.KeyCode == Enum.KeyCode.ButtonL2 then
+        setHoldingState(false)
     end
 end)
 
@@ -731,7 +725,7 @@ RunService.Heartbeat:Connect(function()
         local rightShoulderPos = hrpPos + (hrp.CFrame.RightVector * 1.5)
         
         -- 2. Solve Trajectory Intercept relative to the Right Shoulder
-        local targetPos = solveSTInterceptPoint(rightShoulderPos, ballPos, ballVel) or ballPos
+        local targetPos = solveInterceptPoint(rightShoulderPos, ballPos, ballVel) or ballPos
         local dirXZ = Vector3.new(targetPos.X - hrpPos.X, 0, targetPos.Z - hrpPos.Z)
         
         if dirXZ.Magnitude > 0.1 then
@@ -1292,8 +1286,25 @@ local function executeQBThrow()
 end
 
 ----------------------------------------------------------------------------------
--- 9. NO OOB (NO OUT OF BOUNDS) ENGINE
+-- 9. NO OOB (NO OUT OF BOUNDS) ENGINE (OPTIMIZED TO PREVENT LAG)
 ----------------------------------------------------------------------------------
+task.spawn(function()
+    while task.wait(1) do
+        if _G.HubConfig.NoOOB and _G.HubConfig.NoOOB.Enabled then
+            for _, obj in ipairs(Workspace:GetChildren()) do
+                if obj:IsA("BasePart") then
+                    local name = obj.Name:lower()
+                    if name:find("oob") or name:find("outofbounds") or name:find("out_of_bounds") or name:find("sideline") or name:find("border") then
+                        if obj.CanTouch then
+                            obj.CanTouch = false
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
 RunService.Heartbeat:Connect(function()
     if not _G.HubConfig.NoOOB or not _G.HubConfig.NoOOB.Enabled then return end
 
@@ -1303,17 +1314,6 @@ RunService.Heartbeat:Connect(function()
 
     local isHolding = (ball.Position - hrp.Position).Magnitude <= 10 or ball:IsDescendantOf(char)
     if not isHolding then return end
-
-    for _, obj in ipairs(Workspace:GetDescendants()) do
-        if obj:IsA("BasePart") then
-            local name = obj.Name:lower()
-            if name:find("oob") or name:find("outofbounds") or name:find("out_of_bounds") or name:find("sideline") or name:find("border") then
-                if obj.CanTouch then
-                    obj.CanTouch = false
-                end
-            end
-        end
-    end
 
     local ray = Workspace:Raycast(hrp.Position + Vector3.new(0, 5, 0), Vector3.new(0, -20, 0))
     if ray and ray.Instance then
@@ -1402,7 +1402,7 @@ task.spawn(function()
         end
 
         if _G.HubConfig.PotatoGraphics.Enabled then
-            for _, obj in ipairs(Workspace:GetDescendants()) do
+            for _, obj in ipairs(Workspace:GetChildren()) do
                 if obj:IsA("BasePart") then
                     obj.Material = Enum.Material.SmoothPlastic
                 elseif obj:IsA("Decal") or obj:IsA("Texture") then
@@ -1599,7 +1599,7 @@ ContentArea.ZIndex = 2
 
 local CyberGUI = { Tabs = {}, KeybindRegistry = {}, RefreshCallbacks = {} }
 
--- Keybind Listener System
+-- Keybind Listener System (Unblocked InputEnded)
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     local code = input.KeyCode
@@ -1618,8 +1618,7 @@ UserInputService.InputBegan:Connect(function(input, gameProcessed)
     end
 end)
 
-UserInputService.InputEnded:Connect(function(input, gameProcessed)
-    if gameProcessed then return end
+UserInputService.InputEnded:Connect(function(input)
     local code = input.KeyCode
     if code and code ~= Enum.KeyCode.Unknown then
         for featureName, bindData in pairs(CyberGUI.KeybindRegistry) do
@@ -1855,12 +1854,14 @@ function CyberGUI:CreateTab(tabName)
             Callback = function()
                 if isAction and actionCallback then
                     actionCallback()
-                elseif toggleRef and toggleRef.Toggle then
+                elseif toggleRef and type(toggleRef) == "table" and toggleRef.Toggle then
                     toggleRef.Toggle()
                 end
             end,
             SetState = function(state)
-                if toggleRef and toggleRef.SetState then toggleRef.SetState(state) end
+                if toggleRef and type(toggleRef) == "table" and toggleRef.SetState then 
+                    toggleRef.SetState(state) 
+                end
             end
         }
 
@@ -1942,10 +1943,10 @@ QbABTab:AddDivider()
 
 -- 2. Auto ST Tab
 local AutoSTTab = CyberGUI:CreateTab("Auto ST")
-local autoSTTgl = AutoSTTab:AddToggle("Auto ST Active", _G.HubConfig.AutoST, "Enabled")
+autoSTTgl = AutoSTTab:AddToggle("Auto ST Active", _G.HubConfig.AutoST, "Enabled")
 AutoSTTab:AddValueChanger("Detection Range", _G.HubConfig.AutoST, "DetectionRange")
 AutoSTTab:AddValueChanger("Smoothness", _G.HubConfig.AutoST, "Smoothness")
-AutoSTTab:AddKeybinder("Hold Keybind", _G.HubConfig.AutoST, "Keybind", nil, false, false)
+AutoSTTab:AddKeybinder("Auto ST", _G.HubConfig.AutoST, "Keybind", autoSTTgl, true)
 AutoSTTab:AddDivider()
 
 -- 3. Auto Stick Tab
