@@ -1,3 +1,11 @@
+-- ================================================================================
+-- IVY HUB V2 - COMPACT EDITION (STANDALONE PARITY AUTO ST ENGINE INTEGRATED)
+-- Features: Qb AB, NO OOB, Hider, uwu magnets, Ball TP, Sticky Head, LegitPV, 
+--           Advanced Tackle Reach (XYZ), Hitbox Expander, Loop Speed, Gravity, JP, 
+--           Auto Stick, Tap Bumper, Auto Rocket, Fling, Red Skybox, potato graphics,
+--           Auto ST (Exact Standalone Right-Hand Perpendicular Engine) & Config Engine
+-- ================================================================================
+
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
@@ -56,7 +64,10 @@ _G.HubConfig = _G.HubConfig or {
     BTP = { Enabled = false, MaxDist = 35, CatchArm = "RightHand", Keybind = Enum.KeyCode.E },
     Sticky = { Enabled = false, Range = 10, Smoothness = 12, Strength = 12, Keybind = Enum.KeyCode.Unknown },
     LegitPV = { Enabled = false, PullVec = 0.01, MaxDist = 25, Keybind = Enum.KeyCode.Unknown },
-    AutoST = { Enabled = false, DetectionRange = 45, Smoothness = 25, Keybind = Enum.KeyCode.V },
+    
+    -- Standalone-Identical Auto ST Configuration
+    AutoST = { Enabled = true, DetectionRange = 45, Smoothness = 25, Keybind = Enum.KeyCode.V },
+    
     TackleReach = { Enabled = false, SizeX = 2.52, SizeY = 5.4, SizeZ = 1.41, Transparency = 0.7, Keybind = Enum.KeyCode.Unknown },
     HeadHitbox = { Enabled = false, HeadSize = 3.0, Transparency = 0.5, Keybind = Enum.KeyCode.Unknown },
     Speed = { Enabled = false, SpeedVal = 22.2, Keybind = Enum.KeyCode.Unknown },
@@ -396,7 +407,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 ----------------------------------------------------------------------------------
--- 3. AUTO ST ENGINE (SHOULDER-PERFECT RIGHT-ARM CATCHBOX ALIGNMENT)
+-- 3. AUTO ST ENGINE (EXACT STANDALONE LOGIC & KINEMATIC SOLVER)
 ----------------------------------------------------------------------------------
 local autoSTHeld = false
 local ST_GRAVITY_VEC = Vector3.new(0, -28, 0)
@@ -422,15 +433,15 @@ local function solveSTInterceptPoint(originPos, ballPos, ballVel)
     return bestPoint
 end
 
-UserInputService.InputBegan:Connect(function(inp, gpe)
+UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
-    if inp.KeyCode == Enum.KeyCode.ButtonL2 or inp.KeyCode == _G.HubConfig.AutoST.Keybind then
+    if input.KeyCode == _G.HubConfig.AutoST.Keybind or input.KeyCode == Enum.KeyCode.ButtonL2 then
         autoSTHeld = true
     end
 end)
 
-UserInputService.InputEnded:Connect(function(inp, gpe)
-    if inp.KeyCode == Enum.KeyCode.ButtonL2 or inp.KeyCode == _G.HubConfig.AutoST.Keybind then
+UserInputService.InputEnded:Connect(function(input, gpe)
+    if input.KeyCode == _G.HubConfig.AutoST.Keybind or input.KeyCode == Enum.KeyCode.ButtonL2 then
         autoSTHeld = false
     end
 end)
@@ -450,18 +461,25 @@ RunService.Heartbeat:Connect(function()
     local maxRange = tonumber(_G.HubConfig.AutoST.DetectionRange) or 45
     
     if (hrpPos - ballPos).Magnitude <= maxRange then
+        -- 1. Calculate Estimated Right Shoulder Position (~1.5 studs to local right)
         local rightShoulderPos = hrpPos + (hrp.CFrame.RightVector * 1.5)
+        
+        -- 2. Solve Trajectory Intercept relative to the Right Shoulder
         local targetPos = solveSTInterceptPoint(rightShoulderPos, ballPos, ballVel) or ballPos
         local dirXZ = Vector3.new(targetPos.X - hrpPos.X, 0, targetPos.Z - hrpPos.Z)
         
         if dirXZ.Magnitude > 0.1 then
             local unitDir = dirXZ.Unit
+            
+            -- 3. Dead-Center Alignment: Orient LookVector perpendicular so Right Arm points directly at ball
             local naturalLook = Vector3.new(unitDir.Z, 0, -unitDir.X)
             local targetCFrame = CFrame.lookAt(hrpPos, hrpPos + naturalLook)
             
+            -- 4. Smoothness Math: Converts 1-100 scale to Lerp Alpha
             local smoothVal = math.clamp(tonumber(_G.HubConfig.AutoST.Smoothness) or 25, 1, 100)
             local lerpAlpha = math.clamp((101 - smoothVal) / 100, 0.05, 1.0)
             
+            -- Apply smooth horizontal alignment
             hrp.CFrame = hrp.CFrame:Lerp(targetCFrame, lerpAlpha)
         end
     end
@@ -1656,12 +1674,12 @@ end)
 QbABTab:AddKeybinder("Toggle Qb AB", _G.HubConfig.QBAim, "ToggleKeybind", qbEnableTgl)
 QbABTab:AddDivider()
 
--- 2. Auto ST Tab
+-- 2. Auto ST Tab (Configured to mirror standalone hold-bind logic)
 local AutoSTTab = CyberGUI:CreateTab("Auto ST")
 local autoSTTgl = AutoSTTab:AddToggle("Auto ST Active", _G.HubConfig.AutoST, "Enabled")
 AutoSTTab:AddValueChanger("Detection Range", _G.HubConfig.AutoST, "DetectionRange")
 AutoSTTab:AddValueChanger("Smoothness", _G.HubConfig.AutoST, "Smoothness")
-AutoSTTab:AddKeybinder("Auto ST", _G.HubConfig.AutoST, "Keybind", autoSTTgl, true)
+AutoSTTab:AddKeybinder("Hold Keybind", _G.HubConfig.AutoST, "Keybind", nil, false, false)
 AutoSTTab:AddDivider()
 
 -- 3. Auto Stick Tab
