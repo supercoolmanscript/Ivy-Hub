@@ -1,11 +1,3 @@
--- ================================================================================
--- IVY HUB V2 - COMPACT EDITION (UNTOUCHED QB AIM MATH & UNIVERSAL AUTO ST)
--- Features: QB Aim (Exact Source Math & Engine), Auto ST (Universal Gamemode Engine),
---           NO OOB, Hider, uwu Magnets, Ball TP, Sticky Head, LegitPV, Advanced Tackle Reach,
---           Hitbox Expander, Loop Speed, Gravity, JP, Auto Stick, Tap Bumper, Auto Rocket,
---           Fling, Red Skybox, Potato Graphics, Config Manager
--- ================================================================================
-
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
