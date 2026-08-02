@@ -1,10 +1,3 @@
--- ================================================================================
--- IVY HUB V2 - COMPACT EDITION (CROZO RENDERSTEPPED HITBOX ENGINE INTEGRATED)
--- Features: Qb AB, NO OOB, Hider, uwu magnets, Ball TP, Sticky Head, LegitPV, 
---           Advanced Tackle Reach (XYZ), Hitbox Expander, Loop Speed, Gravity, JP, 
---           Auto Stick, Tap Bumper, Auto Rocket, Fling, Red Skybox, potato graphics & Config Engine
--- ================================================================================
-
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
@@ -63,6 +56,7 @@ _G.HubConfig = _G.HubConfig or {
     BTP = { Enabled = false, MaxDist = 35, CatchArm = "RightHand", Keybind = Enum.KeyCode.E },
     Sticky = { Enabled = false, Range = 10, Smoothness = 12, Strength = 12, Keybind = Enum.KeyCode.Unknown },
     LegitPV = { Enabled = false, PullVec = 0.01, MaxDist = 25, Keybind = Enum.KeyCode.Unknown },
+    AutoST = { Enabled = false, DetectionRange = 45, Smoothness = 25, Keybind = Enum.KeyCode.V },
     TackleReach = { Enabled = false, SizeX = 2.52, SizeY = 5.4, SizeZ = 1.41, Transparency = 0.7, Keybind = Enum.KeyCode.Unknown },
     HeadHitbox = { Enabled = false, HeadSize = 3.0, Transparency = 0.5, Keybind = Enum.KeyCode.Unknown },
     Speed = { Enabled = false, SpeedVal = 22.2, Keybind = Enum.KeyCode.Unknown },
@@ -402,7 +396,79 @@ RunService.Heartbeat:Connect(function()
 end)
 
 ----------------------------------------------------------------------------------
--- 3. AUTO STICK ENGINE (DYNAMIC HITBOX SWITCHING)
+-- 3. AUTO ST ENGINE (SHOULDER-PERFECT RIGHT-ARM CATCHBOX ALIGNMENT)
+----------------------------------------------------------------------------------
+local autoSTHeld = false
+local ST_GRAVITY_VEC = Vector3.new(0, -28, 0)
+
+local function getSTBallPosAtTime(p0, v0, t)
+    return p0 + (v0 * t) + (0.5 * ST_GRAVITY_VEC * (t * t))
+end
+
+local function solveSTInterceptPoint(originPos, ballPos, ballVel)
+    local bestPoint = nil
+    local minDistance = math.huge
+    
+    for t = 0.03, 1.2, 0.04 do
+        local predictedPos = getSTBallPosAtTime(ballPos, ballVel, t)
+        local dist = (predictedPos - originPos).Magnitude
+        
+        if dist < minDistance then
+            minDistance = dist
+            bestPoint = predictedPos
+        end
+    end
+    
+    return bestPoint
+end
+
+UserInputService.InputBegan:Connect(function(inp, gpe)
+    if gpe then return end
+    if inp.KeyCode == Enum.KeyCode.ButtonL2 or inp.KeyCode == _G.HubConfig.AutoST.Keybind then
+        autoSTHeld = true
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(inp, gpe)
+    if inp.KeyCode == Enum.KeyCode.ButtonL2 or inp.KeyCode == _G.HubConfig.AutoST.Keybind then
+        autoSTHeld = false
+    end
+end)
+
+RunService.Heartbeat:Connect(function()
+    if not _G.HubConfig.AutoST.Enabled or not autoSTHeld then return end
+    
+    local char, hrp = getChar()
+    if not char or not hrp then return end
+    
+    local ball = findFootballPart()
+    if not ball then return end
+    
+    local hrpPos = hrp.Position
+    local ballPos = ball.Position
+    local ballVel = ball.AssemblyLinearVelocity or Vector3.zero
+    local maxRange = tonumber(_G.HubConfig.AutoST.DetectionRange) or 45
+    
+    if (hrpPos - ballPos).Magnitude <= maxRange then
+        local rightShoulderPos = hrpPos + (hrp.CFrame.RightVector * 1.5)
+        local targetPos = solveSTInterceptPoint(rightShoulderPos, ballPos, ballVel) or ballPos
+        local dirXZ = Vector3.new(targetPos.X - hrpPos.X, 0, targetPos.Z - hrpPos.Z)
+        
+        if dirXZ.Magnitude > 0.1 then
+            local unitDir = dirXZ.Unit
+            local naturalLook = Vector3.new(unitDir.Z, 0, -unitDir.X)
+            local targetCFrame = CFrame.lookAt(hrpPos, hrpPos + naturalLook)
+            
+            local smoothVal = math.clamp(tonumber(_G.HubConfig.AutoST.Smoothness) or 25, 1, 100)
+            local lerpAlpha = math.clamp((101 - smoothVal) / 100, 0.05, 1.0)
+            
+            hrp.CFrame = hrp.CFrame:Lerp(targetCFrame, lerpAlpha)
+        end
+    end
+end)
+
+----------------------------------------------------------------------------------
+-- 4. AUTO STICK ENGINE (DYNAMIC HITBOX SWITCHING)
 ----------------------------------------------------------------------------------
 local nudgeActive = false
 
@@ -500,7 +566,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 ----------------------------------------------------------------------------------
--- 4. AUTO ROCKET ENGINE
+-- 5. AUTO ROCKET ENGINE
 ----------------------------------------------------------------------------------
 local currentDiveTime = 0
 local lastIsDiving = false
@@ -536,7 +602,7 @@ RunService.Heartbeat:Connect(function(dt)
 end)
 
 ----------------------------------------------------------------------------------
--- 5. UWU MAGNETS & BALL TP (BTP)
+-- 6. UWU MAGNETS & BALL TP (BTP)
 ----------------------------------------------------------------------------------
 RunService.Heartbeat:Connect(function()
     local char, hrp = getChar()
@@ -569,7 +635,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 ----------------------------------------------------------------------------------
--- 6. TACKLE REACH ENGINE (ADVANCED WORKSPACE HITBOX OVERRIDE SYSTEM)
+-- 7. TACKLE REACH ENGINE (ADVANCED WORKSPACE HITBOX OVERRIDE SYSTEM)
 ----------------------------------------------------------------------------------
 local reachWatchers = setmetatable({}, {__mode = "k"})
 local reachOriginalParts = {
@@ -863,7 +929,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 ----------------------------------------------------------------------------------
--- 7. QB AB TRACKING & TARGETING LOOPS
+-- 8. QB AB TRACKING & TARGETING LOOPS
 ----------------------------------------------------------------------------------
 local qbTargetPlayer = nil
 
@@ -942,7 +1008,7 @@ local function executeQBThrow()
 end
 
 ----------------------------------------------------------------------------------
--- 8. NO OOB (NO OUT OF BOUNDS) ENGINE
+-- 9. NO OOB (NO OUT OF BOUNDS) ENGINE
 ----------------------------------------------------------------------------------
 RunService.Heartbeat:Connect(function()
     if not _G.HubConfig.NoOOB or not _G.HubConfig.NoOOB.Enabled then return end
@@ -976,7 +1042,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 ----------------------------------------------------------------------------------
--- 9. CROZO HITBOX ENGINE (COLLIDABLE HUMANOIDROOTPART SYSTEM)
+-- 10. CROZO HITBOX ENGINE (COLLIDABLE HUMANOIDROOTPART SYSTEM)
 ----------------------------------------------------------------------------------
 local originalHitboxProperties = {}
 
@@ -1027,7 +1093,7 @@ RunService.RenderStepped:Connect(function()
 end)
 
 ----------------------------------------------------------------------------------
--- 10. VISUALS & ENVIRONMENT
+-- 11. VISUALS & ENVIRONMENT
 ----------------------------------------------------------------------------------
 task.spawn(function()
     while task.wait(1) do
@@ -1064,7 +1130,7 @@ task.spawn(function()
 end)
 
 ----------------------------------------------------------------------------------
--- 11. MOVEMENT & PHYSICAL OVERRIDES
+-- 12. MOVEMENT & PHYSICAL OVERRIDES
 ----------------------------------------------------------------------------------
 local lastJumpTime = 0
 
@@ -1590,7 +1656,15 @@ end)
 QbABTab:AddKeybinder("Toggle Qb AB", _G.HubConfig.QBAim, "ToggleKeybind", qbEnableTgl)
 QbABTab:AddDivider()
 
--- 2. Auto Stick Tab
+-- 2. Auto ST Tab
+local AutoSTTab = CyberGUI:CreateTab("Auto ST")
+local autoSTTgl = AutoSTTab:AddToggle("Auto ST Active", _G.HubConfig.AutoST, "Enabled")
+AutoSTTab:AddValueChanger("Detection Range", _G.HubConfig.AutoST, "DetectionRange")
+AutoSTTab:AddValueChanger("Smoothness", _G.HubConfig.AutoST, "Smoothness")
+AutoSTTab:AddKeybinder("Auto ST", _G.HubConfig.AutoST, "Keybind", autoSTTgl, true)
+AutoSTTab:AddDivider()
+
+-- 3. Auto Stick Tab
 local AutoStickTab = CyberGUI:CreateTab("Auto Stick")
 local autoStickTgl = AutoStickTab:AddToggle("Auto Stick", _G.HubConfig.AutoStick, "Enabled")
 AutoStickTab:AddValueChanger("Activate Dist", _G.HubConfig.AutoStick, "ActivateDist")
@@ -1604,14 +1678,14 @@ AutoStickTab:AddValueChanger("Correction Speed", _G.HubConfig.AutoStick, "CorrSp
 AutoStickTab:AddKeybinder("Auto Stick", _G.HubConfig.AutoStick, "Keybind", autoStickTgl)
 AutoStickTab:AddDivider()
 
--- 3. Tap Bumper Tab
+-- 4. Tap Bumper Tab
 local TapBumperTab = CyberGUI:CreateTab("Tap Bumper")
 local tapBumperTgl = TapBumperTab:AddToggle("Tap Bumper", _G.HubConfig.TapBumper, "Enabled")
 TapBumperTab:AddValueChanger("Launch Force", _G.HubConfig.TapBumper, "Force")
 TapBumperTab:AddKeybinder("Tap Bumper", _G.HubConfig.TapBumper, "Keybind", nil, false, true, triggerTapBumperImpulse)
 TapBumperTab:AddDivider()
 
--- 4. Auto Rocket Tab
+-- 5. Auto Rocket Tab
 local AutoRocketTab = CyberGUI:CreateTab("Auto Rocket")
 local autoRocketTgl = AutoRocketTab:AddToggle("Auto Rocket", _G.HubConfig.AutoRocket, "Enabled")
 AutoRocketTab:AddToggle("Head Only Velocity", _G.HubConfig.AutoRocket, "HeadOnly")
@@ -1619,14 +1693,14 @@ AutoRocketTab:AddValueChanger("Dive Power", _G.HubConfig.AutoRocket, "Power")
 AutoRocketTab:AddKeybinder("Auto Rocket", _G.HubConfig.AutoRocket, "Keybind", autoRocketTgl)
 AutoRocketTab:AddDivider()
 
--- 5. Fling Tab
+-- 6. Fling Tab
 local FlingTab = CyberGUI:CreateTab("Fling")
 local flingTgl = FlingTab:AddToggle("Fling Active", _G.HubConfig.Fling, "Enabled")
 FlingTab:AddValueChanger("Fling Power", _G.HubConfig.Fling, "Power")
 FlingTab:AddKeybinder("Fling Action", _G.HubConfig.Fling, "Keybind", flingTgl, false, true, triggerFlingBoost)
 FlingTab:AddDivider()
 
--- 6. Sticky Tab (Hold Keybind)
+-- 7. Sticky Tab (Hold Keybind)
 local StickyTab = CyberGUI:CreateTab("Sticky")
 local stickyTgl = StickyTab:AddToggle("Sticky Head", _G.HubConfig.Sticky, "Enabled")
 StickyTab:AddValueChanger("Detection Range", _G.HubConfig.Sticky, "Range")
@@ -1635,7 +1709,7 @@ StickyTab:AddValueChanger("Strength", _G.HubConfig.Sticky, "Strength")
 StickyTab:AddKeybinder("Sticky Head", _G.HubConfig.Sticky, "Keybind", stickyTgl, true)
 StickyTab:AddDivider()
 
--- 7. BTP & Magnet Tab
+-- 8. BTP & Magnet Tab
 local MagnetTab = CyberGUI:CreateTab("BTP & Magnet")
 local magTgl = MagnetTab:AddToggle("uwu magnets", _G.HubConfig.uwuMagnets, "Enabled")
 MagnetTab:AddValueChanger("Magnet Power", _G.HubConfig.uwuMagnets, "Power")
@@ -1649,7 +1723,7 @@ MagnetTab:AddValueChanger("Catch Arm", _G.HubConfig.BTP, "CatchArm")
 MagnetTab:AddKeybinder("Ball TP", _G.HubConfig.BTP, "Keybind", btpTgl)
 MagnetTab:AddDivider()
 
--- 8. LegitPV Tab (Hold Keybind)
+-- 9. LegitPV Tab (Hold Keybind)
 local PVTab = CyberGUI:CreateTab("LegitPV")
 local pvTgl = PVTab:AddToggle("Pull Vector Assist", _G.HubConfig.LegitPV, "Enabled")
 PVTab:AddValueChanger("Pull Vector Strength", _G.HubConfig.LegitPV, "PullVec")
@@ -1657,7 +1731,7 @@ PVTab:AddValueChanger("Max Distance", _G.HubConfig.LegitPV, "MaxDist")
 PVTab:AddKeybinder("LegitPV", _G.HubConfig.LegitPV, "Keybind", pvTgl, true)
 PVTab:AddDivider()
 
--- 9. Tackle Reach Tab
+-- 10. Tackle Reach Tab
 local ReachTab = CyberGUI:CreateTab("Tackle Reach")
 local reachTgl = ReachTab:AddToggle("Tackle Reach", _G.HubConfig.TackleReach, "Enabled")
 ReachTab:AddValueChanger("Reach Size X", _G.HubConfig.TackleReach, "SizeX")
@@ -1667,7 +1741,7 @@ ReachTab:AddValueChanger("Transparency", _G.HubConfig.TackleReach, "Transparency
 ReachTab:AddKeybinder("Tackle Reach", _G.HubConfig.TackleReach, "Keybind", reachTgl)
 ReachTab:AddDivider()
 
--- 10. Movement & Physics Tab
+-- 11. Movement & Physics Tab
 local MoveTab = CyberGUI:CreateTab("Movement")
 local noOobTgl = MoveTab:AddToggle("NO OOB", _G.HubConfig.NoOOB, "Enabled")
 MoveTab:AddKeybinder("NO OOB", _G.HubConfig.NoOOB, "Keybind", noOobTgl)
@@ -1689,7 +1763,7 @@ MoveTab:AddValueChanger("Cooldown", _G.HubConfig.JP, "Cooldown")
 MoveTab:AddKeybinder("JP", _G.HubConfig.JP, "Keybind", jumpTgl)
 MoveTab:AddDivider()
 
--- 11. Visuals Tab
+-- 12. Visuals Tab
 local VisualsTab = CyberGUI:CreateTab("Visuals")
 local redSkyTgl = VisualsTab:AddToggle("Red Skybox", _G.HubConfig.RedSky, "Enabled")
 VisualsTab:AddValueChanger("Sky Brightness", _G.HubConfig.RedSky, "Brightness")
@@ -1700,7 +1774,7 @@ local potatoTgl = VisualsTab:AddToggle("potato graphics", _G.HubConfig.PotatoGra
 VisualsTab:AddKeybinder("potato graphics", _G.HubConfig.PotatoGraphics, "Keybind", potatoTgl)
 VisualsTab:AddDivider()
 
--- 12. Hitbox Expander Tab
+-- 13. Hitbox Expander Tab
 local HitboxTab = CyberGUI:CreateTab("Hitbox")
 local headTgl = HitboxTab:AddToggle("Hitbox Expander", _G.HubConfig.HeadHitbox, "Enabled")
 HitboxTab:AddValueChanger("Hitbox Size", _G.HubConfig.HeadHitbox, "HeadSize")
@@ -1708,7 +1782,7 @@ HitboxTab:AddValueChanger("Transparency", _G.HubConfig.HeadHitbox, "Transparency
 HitboxTab:AddKeybinder("Hitbox Expander", _G.HubConfig.HeadHitbox, "Keybind", headTgl)
 HitboxTab:AddDivider()
 
--- 13. Misc Tab & Config Manager Engine
+-- 14. Misc Tab & Config Manager Engine
 local MiscTab = CyberGUI:CreateTab("Misc")
 
 MiscTab:AddKeybinder("Gui Toggle", _G.HubConfig.Misc, "Keybind", nil, false, true, function()
