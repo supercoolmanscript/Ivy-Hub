@@ -3,7 +3,7 @@
 -- Features: QB Aim (Exact Source Math & Engine), Auto ST (100% Untouched Engine),
 --           NO OOB, Hider, uwu Magnets, Ball TP, Sticky Head, LegitPV, Advanced Tackle Reach,
 --           Hitbox Expander, Loop Speed, Gravity, JP, Auto Stick, Tap Bumper, Auto Rocket,
---           Fling, Red Skybox, Potato Graphics, Config Manager
+--           Fling, Red Skybox, Potato Graphics, Stick Bump, Config Manager
 -- ================================================================================
 
 local UserInputService = game:GetService("UserInputService")
@@ -75,6 +75,7 @@ _G.HubConfig = _G.HubConfig or {
     JP = { Enabled = false, JumpPower = 50, Cooldown = 1.15, Keybind = Enum.KeyCode.Unknown },
     
     AutoStick = { Enabled = false, ActivateDist = 1.9, LockInDist = 5, MaxStrength = 55, OffsetY = 2.8, BalanceRadius = 3.75, VertMin = -4, VertMax = 4, CorrSpeed = 0.55, Keybind = Enum.KeyCode.Unknown },
+    StickBump = { Enabled = false, Power = 55, Range = 15, Keybind = Enum.KeyCode.Unknown },
     TapBumper = { Enabled = false, Force = 5000, Keybind = Enum.KeyCode.N },
     AutoRocket = { Enabled = false, HeadOnly = false, Power = 45, Keybind = Enum.KeyCode.Unknown },
     Fling = { Enabled = false, Power = 1000, Keybind = Enum.KeyCode.X },
@@ -844,6 +845,32 @@ RunService.Heartbeat:Connect(function()
 end)
 
 ----------------------------------------------------------------------------------
+-- STICK BUMP ENGINE
+----------------------------------------------------------------------------------
+RunService.Heartbeat:Connect(function()
+    if not _G.HubConfig.StickBump or not _G.HubConfig.StickBump.Enabled then return end
+    local char, hrp, hum = getChar()
+    if not char or not hrp or not hum then return end
+
+    local range = tonumber(_G.HubConfig.StickBump.Range) or 15
+    local power = tonumber(_G.HubConfig.StickBump.Power) or 55
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character then
+            local eHrp = p.Character:FindFirstChild("HumanoidRootPart")
+            if eHrp then
+                local dist = (hrp.Position - eHrp.Position).Magnitude
+                if dist <= range then
+                    local dir = (eHrp.Position - hrp.Position).Unit
+                    hrp.AssemblyLinearVelocity = Vector3.new(dir.X * power, hrp.AssemblyLinearVelocity.Y, dir.Z * power)
+                    break
+                end
+            end
+        end
+    end
+end)
+
+----------------------------------------------------------------------------------
 -- 5. AUTO ROCKET ENGINE
 ----------------------------------------------------------------------------------
 local currentDiveTime = 0
@@ -1495,7 +1522,7 @@ local function SpawnMovingVineLeaf()
     local Leaf = Instance.new("TextLabel", VineCanvas)
     Leaf.Size = UDim2.new(0, 14, 0, 14)
     Leaf.Position = UDim2.new(math.random(), 0, 1, 10)
-    Leaf.Text = "🍃"
+    Leaf.Text = "🌿"
     Leaf.TextSize = math.random(8, 12)
     Leaf.BackgroundTransparency = 1
     Leaf.TextTransparency = 0.75
@@ -1560,7 +1587,7 @@ Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 8)
 local Title = Instance.new("TextLabel", Header)
 Title.Size = UDim2.new(0, 200, 1, 0)
 Title.Position = UDim2.new(0, 10, 0, 0)
-Title.Text = "🍃 IVY <font color=\"rgb(50, 220, 110)\">HUB</font> <font size=\"8\" color=\"rgb(140, 180, 155)\">V2</font>"
+Title.Text = "🌿 IVY <font color=\"rgb(50, 220, 110)\">HUB</font> <font size=\"8\" color=\"rgb(140, 180, 155)\">V2</font>"
 Title.RichText = true
 Title.TextColor3 = THEME.Text
 Title.TextSize = 12
@@ -1909,7 +1936,7 @@ function CyberGUI:CreateTab(tabName)
         local CenterDot = Instance.new("TextLabel", Divider)
         CenterDot.Size = UDim2.new(0, 10, 0, 10)
         CenterDot.Position = UDim2.new(0.5, -5, 0.5, -5)
-        CenterDot.Text = "🍃"
+        CenterDot.Text = "🌿"
         CenterDot.TextSize = 7
         CenterDot.BackgroundTransparency = 1
     end
@@ -1963,14 +1990,22 @@ AutoStickTab:AddValueChanger("Correction Speed", _G.HubConfig.AutoStick, "CorrSp
 AutoStickTab:AddKeybinder("Auto Stick", _G.HubConfig.AutoStick, "Keybind", autoStickTgl)
 AutoStickTab:AddDivider()
 
--- 4. Tap Bumper Tab
+-- 4. Stick Bump Tab
+local StickBumpTab = CyberGUI:CreateTab("Stick Bump")
+local stickBumpTgl = StickBumpTab:AddToggle("Stick Bump", _G.HubConfig.StickBump, "Enabled")
+StickBumpTab:AddValueChanger("Bump Power", _G.HubConfig.StickBump, "Power")
+StickBumpTab:AddValueChanger("Detection Range", _G.HubConfig.StickBump, "Range")
+StickBumpTab:AddKeybinder("Stick Bump", _G.HubConfig.StickBump, "Keybind", stickBumpTgl)
+StickBumpTab:AddDivider()
+
+-- 5. Tap Bumper Tab
 local TapBumperTab = CyberGUI:CreateTab("Tap Bumper")
 local tapBumperTgl = TapBumperTab:AddToggle("Tap Bumper", _G.HubConfig.TapBumper, "Enabled")
 TapBumperTab:AddValueChanger("Launch Force", _G.HubConfig.TapBumper, "Force")
 TapBumperTab:AddKeybinder("Tap Bumper", _G.HubConfig.TapBumper, "Keybind", nil, false, true, triggerTapBumperImpulse)
 TapBumperTab:AddDivider()
 
--- 5. Auto Rocket Tab
+-- 6. Auto Rocket Tab
 local AutoRocketTab = CyberGUI:CreateTab("Auto Rocket")
 local autoRocketTgl = AutoRocketTab:AddToggle("Auto Rocket", _G.HubConfig.AutoRocket, "Enabled")
 AutoRocketTab:AddToggle("Head Only Velocity", _G.HubConfig.AutoRocket, "HeadOnly")
@@ -1978,14 +2013,14 @@ AutoRocketTab:AddValueChanger("Dive Power", _G.HubConfig.AutoRocket, "Power")
 AutoRocketTab:AddKeybinder("Auto Rocket", _G.HubConfig.AutoRocket, "Keybind", autoRocketTgl)
 AutoRocketTab:AddDivider()
 
--- 6. Fling Tab
+-- 7. Fling Tab
 local FlingTab = CyberGUI:CreateTab("Fling")
 local flingTgl = FlingTab:AddToggle("Fling Active", _G.HubConfig.Fling, "Enabled")
 FlingTab:AddValueChanger("Fling Power", _G.HubConfig.Fling, "Power")
 FlingTab:AddKeybinder("Fling Action", _G.HubConfig.Fling, "Keybind", flingTgl, false, true, triggerFlingBoost)
 FlingTab:AddDivider()
 
--- 7. Sticky Tab (Hold Keybind)
+-- 8. Sticky Tab (Hold Keybind)
 local StickyTab = CyberGUI:CreateTab("Sticky")
 local stickyTgl = StickyTab:AddToggle("Sticky Head", _G.HubConfig.Sticky, "Enabled")
 StickyTab:AddValueChanger("Detection Range", _G.HubConfig.Sticky, "Range")
@@ -1994,7 +2029,7 @@ StickyTab:AddValueChanger("Strength", _G.HubConfig.Sticky, "Strength")
 StickyTab:AddKeybinder("Sticky Head", _G.HubConfig.Sticky, "Keybind", stickyTgl, true)
 StickyTab:AddDivider()
 
--- 8. BTP & Magnet Tab
+-- 9. BTP & Magnet Tab
 local MagnetTab = CyberGUI:CreateTab("BTP & Magnet")
 local magTgl = MagnetTab:AddToggle("uwu magnets", _G.HubConfig.uwuMagnets, "Enabled")
 MagnetTab:AddValueChanger("Magnet Power", _G.HubConfig.uwuMagnets, "Power")
@@ -2008,7 +2043,7 @@ MagnetTab:AddValueChanger("Catch Arm", _G.HubConfig.BTP, "CatchArm")
 MagnetTab:AddKeybinder("Ball TP", _G.HubConfig.BTP, "Keybind", btpTgl)
 MagnetTab:AddDivider()
 
--- 9. LegitPV Tab (Hold Keybind)
+-- 10. LegitPV Tab (Hold Keybind)
 local PVTab = CyberGUI:CreateTab("LegitPV")
 local pvTgl = PVTab:AddToggle("Pull Vector Assist", _G.HubConfig.LegitPV, "Enabled")
 PVTab:AddValueChanger("Pull Vector Strength", _G.HubConfig.LegitPV, "PullVec")
@@ -2016,7 +2051,7 @@ PVTab:AddValueChanger("Max Distance", _G.HubConfig.LegitPV, "MaxDist")
 PVTab:AddKeybinder("LegitPV", _G.HubConfig.LegitPV, "Keybind", pvTgl, true)
 PVTab:AddDivider()
 
--- 10. Tackle Reach Tab
+-- 11. Tackle Reach Tab
 local ReachTab = CyberGUI:CreateTab("Tackle Reach")
 local reachTgl = ReachTab:AddToggle("Tackle Reach", _G.HubConfig.TackleReach, "Enabled")
 ReachTab:AddValueChanger("Reach Size X", _G.HubConfig.TackleReach, "SizeX")
@@ -2026,7 +2061,7 @@ ReachTab:AddValueChanger("Transparency", _G.HubConfig.TackleReach, "Transparency
 ReachTab:AddKeybinder("Tackle Reach", _G.HubConfig.TackleReach, "Keybind", reachTgl)
 ReachTab:AddDivider()
 
--- 11. Movement & Physics Tab
+-- 12. Movement & Physics Tab
 local MoveTab = CyberGUI:CreateTab("Movement")
 local noOobTgl = MoveTab:AddToggle("NO OOB", _G.HubConfig.NoOOB, "Enabled")
 MoveTab:AddKeybinder("NO OOB", _G.HubConfig.NoOOB, "Keybind", noOobTgl)
@@ -2048,7 +2083,7 @@ MoveTab:AddValueChanger("Cooldown", _G.HubConfig.JP, "Cooldown")
 MoveTab:AddKeybinder("JP", _G.HubConfig.JP, "Keybind", jumpTgl)
 MoveTab:AddDivider()
 
--- 12. Visuals Tab
+-- 13. Visuals Tab
 local VisualsTab = CyberGUI:CreateTab("Visuals")
 local redSkyTgl = VisualsTab:AddToggle("Red Skybox", _G.HubConfig.RedSky, "Enabled")
 VisualsTab:AddValueChanger("Sky Brightness", _G.HubConfig.RedSky, "Brightness")
@@ -2059,7 +2094,7 @@ local potatoTgl = VisualsTab:AddToggle("potato graphics", _G.HubConfig.PotatoGra
 VisualsTab:AddKeybinder("potato graphics", _G.HubConfig.PotatoGraphics, "Keybind", potatoTgl)
 VisualsTab:AddDivider()
 
--- 13. Hitbox Expander Tab
+-- 14. Hitbox Expander Tab
 local HitboxTab = CyberGUI:CreateTab("Hitbox")
 local headTgl = HitboxTab:AddToggle("Hitbox Expander", _G.HubConfig.HeadHitbox, "Enabled")
 HitboxTab:AddValueChanger("Hitbox Size", _G.HubConfig.HeadHitbox, "HeadSize")
@@ -2067,7 +2102,7 @@ HitboxTab:AddValueChanger("Transparency", _G.HubConfig.HeadHitbox, "Transparency
 HitboxTab:AddKeybinder("Hitbox Expander", _G.HubConfig.HeadHitbox, "Keybind", headTgl)
 HitboxTab:AddDivider()
 
--- 14. Misc Tab & Config Manager Engine
+-- 15. Misc Tab & Config Manager Engine
 local MiscTab = CyberGUI:CreateTab("Misc")
 
 MiscTab:AddKeybinder("Gui Toggle", _G.HubConfig.Misc, "Keybind", nil, false, true, function()
