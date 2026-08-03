@@ -1,9 +1,9 @@
 -- ================================================================================
--- IVY HUB V2 - COMPACT EDITION (AUTO ST UNTOUCHED SNIPPET INTEGRATION)
+-- IVY HUB V2 - COMPACT EDITION (DIRECT STICK BUMP INTEGRATION - HOLD KEYBIND)
 -- Features: QB Aim (Exact Source Math & Engine), Auto ST (100% Untouched Engine),
 --           NO OOB, Hider, uwu Magnets, Ball TP, Sticky Head, LegitPV, Advanced Tackle Reach,
 --           Hitbox Expander, Loop Speed, Gravity, JP, Auto Stick, Tap Bumper, Auto Rocket,
---           Fling, Red Skybox, Potato Graphics, Stick Bump, Config Manager
+--           Fling, Red Skybox, Potato Graphics, Stick Bump (Hold), Config Manager
 -- ================================================================================
 
 local UserInputService = game:GetService("UserInputService")
@@ -75,7 +75,21 @@ _G.HubConfig = _G.HubConfig or {
     JP = { Enabled = false, JumpPower = 50, Cooldown = 1.15, Keybind = Enum.KeyCode.Unknown },
     
     AutoStick = { Enabled = false, ActivateDist = 1.9, LockInDist = 5, MaxStrength = 55, OffsetY = 2.8, BalanceRadius = 3.75, VertMin = -4, VertMax = 4, CorrSpeed = 0.55, Keybind = Enum.KeyCode.Unknown },
-    StickBump = { Enabled = false, Power = 55, Range = 15, Keybind = Enum.KeyCode.Unknown },
+    
+    -- UNTOUCHED USER STICK BUMP SETTINGS
+    StickBump = {
+        Enabled = false,
+        PullStrength = 1.3,
+        Stickiness = 1.9,
+        BoostPower = 55,
+        Cooldown = 3,
+        BalanceRadius = 1.85,
+        VertMin = 0.75,
+        VertMax = 1.00,
+        CorrectionSpeed = 0.55,
+        Keybind = Enum.KeyCode.Unknown
+    },
+
     TapBumper = { Enabled = false, Force = 5000, Keybind = Enum.KeyCode.N },
     AutoRocket = { Enabled = false, HeadOnly = false, Power = 45, Keybind = Enum.KeyCode.Unknown },
     Fling = { Enabled = false, Power = 1000, Keybind = Enum.KeyCode.X },
@@ -602,7 +616,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 ----------------------------------------------------------------------------------
--- 2. STICKY HEAD MECHANIC (HOLD KEYBIND - DYNAMIC HITBOX SWITCHING)
+-- 2. STICKY HEAD MECHANIC (HOLD KEYBIND)
 ----------------------------------------------------------------------------------
 local stickyHeld = false
 
@@ -610,7 +624,6 @@ local function getStickyTargetPos(maxDist)
     local char, hrp = getChar()
     if not hrp then return nil end
     local bestPos, bestDist = nil, maxDist or 9999
-    local useHitbox = _G.HubConfig.HeadHitbox.Enabled
 
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character then
@@ -620,11 +633,7 @@ local function getStickyTargetPos(maxDist)
                 local d = (hrp.Position - eHrp.Position).Magnitude
                 if d < bestDist then
                     bestDist = d
-                    if useHitbox then
-                        bestPos = eHrp.Position + Vector3.new(0, (eHrp.Size.Y / 2) + 2.5, 0)
-                    else
-                        bestPos = eHead.Position + Vector3.new(0, 2.5, 0)
-                    end
+                    bestPos = eHead.Position + Vector3.new(0, 2.5, 0)
                 end
             end
         end
@@ -722,32 +731,25 @@ RunService.Heartbeat:Connect(function()
     local maxRange = tonumber(_G.HubConfig.AutoST.DetectionRange) or 45
     
     if (hrpPos - ballPos).Magnitude <= maxRange then
-        -- 1. Calculate Estimated Right Shoulder Position (~1.5 studs to local right)
         local rightShoulderPos = hrpPos + (hrp.CFrame.RightVector * 1.5)
-        
-        -- 2. Solve Trajectory Intercept relative to the Right Shoulder
         local targetPos = solveInterceptPoint(rightShoulderPos, ballPos, ballVel) or ballPos
         local dirXZ = Vector3.new(targetPos.X - hrpPos.X, 0, targetPos.Z - hrpPos.Z)
         
         if dirXZ.Magnitude > 0.1 then
             local unitDir = dirXZ.Unit
-            
-            -- 3. Dead-Center Alignment: Orient LookVector perpendicular so Right Arm points directly at ball
             local naturalLook = Vector3.new(unitDir.Z, 0, -unitDir.X)
             local targetCFrame = CFrame.lookAt(hrpPos, hrpPos + naturalLook)
             
-            -- 4. Smoothness Math: Converts 1-100 scale to Lerp Alpha
             local smoothVal = math.clamp(tonumber(_G.HubConfig.AutoST.Smoothness) or 25, 1, 100)
             local lerpAlpha = math.clamp((101 - smoothVal) / 100, 0.05, 1.0)
             
-            -- Apply smooth horizontal alignment
             hrp.CFrame = hrp.CFrame:Lerp(targetCFrame, lerpAlpha)
         end
     end
 end)
 
 ----------------------------------------------------------------------------------
--- 4. AUTO STICK ENGINE (DYNAMIC HITBOX SWITCHING)
+-- 4. AUTO STICK ENGINE
 ----------------------------------------------------------------------------------
 local nudgeActive = false
 
@@ -767,14 +769,12 @@ RunService.Heartbeat:Connect(function()
     local function findClosestAutoStickTarget()
         local closestChar, closestPos, shortestDist = nil, nil, math.huge
         local balRad = tonumber(_G.HubConfig.AutoStick.BalanceRadius) or 3.75
-        local useHitbox = _G.HubConfig.HeadHitbox.Enabled
 
         for _, op in pairs(Players:GetPlayers()) do
             if op ~= LocalPlayer and op.Character then
-                local eHrp = op.Character:FindFirstChild("HumanoidRootPart")
                 local eHead = op.Character:FindFirstChild("Head")
-                if eHrp and eHead then
-                    local basePos = useHitbox and (eHrp.Position + Vector3.new(0, eHrp.Size.Y / 2, 0)) or eHead.Position
+                if eHead then
+                    local basePos = eHead.Position
                     local dist = (basePos - hrp.Position).Magnitude
                     if dist < balRad and dist < shortestDist then
                         shortestDist = dist
@@ -845,29 +845,217 @@ RunService.Heartbeat:Connect(function()
 end)
 
 ----------------------------------------------------------------------------------
--- STICK BUMP ENGINE
+-- EXACT USER STICK BUMP ENGINE (UNTOUCHED SNIPPET CODE INTEGRATION)
 ----------------------------------------------------------------------------------
+
+-- 1. Semi-legit Nudge Engine (Ground/Pos Heartbeat)
+local function findClosestHeadForBump()
+    local char, hrp = getChar()
+    if not hrp then return nil end
+    local closestHead = nil
+    local shortestDistance = math.huge
+    local balanceRadius = tonumber(_G.HubConfig.StickBump.BalanceRadius) or 1.85
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
+            local head = player.Character.Head
+            local distance = (head.Position - hrp.Position).Magnitude
+            if distance < balanceRadius and distance < shortestDistance then
+                shortestDistance = distance
+                closestHead = head
+            end
+        end
+    end
+    return closestHead
+end
+
 RunService.Heartbeat:Connect(function()
     if not _G.HubConfig.StickBump or not _G.HubConfig.StickBump.Enabled then return end
-    local char, hrp, hum = getChar()
-    if not char or not hrp or not hum then return end
+    local char, hrp = getChar()
+    if not hrp then return end
 
-    local range = tonumber(_G.HubConfig.StickBump.Range) or 15
-    local power = tonumber(_G.HubConfig.StickBump.Power) or 55
+    local verticalRangeMin = tonumber(_G.HubConfig.StickBump.VertMin) or 0.75
+    local verticalRangeMax = tonumber(_G.HubConfig.StickBump.VertMax) or 1.00
+    local correctionSpeed = tonumber(_G.HubConfig.StickBump.CorrectionSpeed) or 0.55
 
-    for _, p in ipairs(Players:GetPlayers()) do
+    local head = findClosestHeadForBump()
+    if head then
+        local verticalDiff = hrp.Position.Y - head.Position.Y
+        if verticalDiff > verticalRangeMin and verticalDiff < verticalRangeMax then
+            local targetPos = Vector3.new(
+                head.Position.X + (math.random() - 0.5) * 0.12,
+                hrp.Position.Y,
+                head.Position.Z + (math.random() - 0.5) * 0.14
+            )
+            local newPos = hrp.Position:Lerp(targetPos, correctionSpeed)
+            hrp.CFrame = CFrame.new(newPos, newPos + hrp.CFrame.LookVector)
+        end
+    end
+end)
+
+-- 2. Air Sticky Physics Engine (RenderStepped)
+local function closestPlayerForBump()
+    local char, hrp = getChar()
+    if not hrp then return nil end
+    local nearest = nil
+    local dist = 35
+    for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character then
             local eHrp = p.Character:FindFirstChild("HumanoidRootPart")
-            if eHrp then
-                local dist = (hrp.Position - eHrp.Position).Magnitude
-                if dist <= range then
-                    local dir = (eHrp.Position - hrp.Position).Unit
-                    hrp.AssemblyLinearVelocity = Vector3.new(dir.X * power, hrp.AssemblyLinearVelocity.Y, dir.Z * power)
-                    break
+            local eHum = p.Character:FindFirstChild("Humanoid")
+            if eHrp and eHum and eHum.Health > 0 then
+                local d = (eHrp.Position - hrp.Position).Magnitude
+                if d < dist then
+                    dist = d
+                    nearest = p
                 end
             end
         end
     end
+    return nearest
+end
+
+RunService.RenderStepped:Connect(function()
+    if not _G.HubConfig.StickBump or not _G.HubConfig.StickBump.Enabled then return end
+    local char, hrp, hum = getChar()
+    if not char or not hrp or not hum then return end
+
+    local target = closestPlayerForBump()
+    if not target or not target.Character then return end
+
+    local head = target.Character:FindFirstChild("Head")
+    if not head then return end
+
+    local pullStrength = tonumber(_G.HubConfig.StickBump.PullStrength) or 1.3
+    local stickiness = tonumber(_G.HubConfig.StickBump.Stickiness) or 1.9
+
+    if hum.FloorMaterial == Enum.Material.Air then
+        local headPos = head.Position + Vector3.new(0, 1.6, 0)
+        local offset = headPos - hrp.Position
+        local dist = offset.Magnitude
+        local vel = hrp.AssemblyLinearVelocity
+
+        -- Pull
+        if dist > 2.5 then
+            local multiplier = pullStrength * 18
+            local desired = offset.Unit * multiplier
+            hrp.AssemblyLinearVelocity = Vector3.new(
+                vel.X + (desired.X - vel.X) * 0.25,
+                vel.Y,
+                vel.Z + (desired.Z - vel.Z) * 0.25
+            )
+        end
+
+        -- Stickiness
+        if dist <= 3 then
+            local centerDir = (headPos - hrp.Position)
+            local horizontal = Vector3.new(centerDir.X, 0, centerDir.Z)
+            hrp.AssemblyLinearVelocity += horizontal.Unit * (stickiness * 5)
+        end
+
+        -- Boost mode (sticky)
+        if dist <= 2 then
+            local boostOffset = headPos - hrp.Position
+            hrp.AssemblyLinearVelocity = Vector3.new(
+                boostOffset.X * (stickiness * 5),
+                hrp.AssemblyLinearVelocity.Y,
+                boostOffset.Z * (stickiness * 5)
+            )
+        end
+
+        -- Head lock
+        if dist <= 1.2 then
+            local lock = headPos - hrp.Position
+            hrp.AssemblyLinearVelocity = Vector3.new(
+                lock.X * (stickiness * 6),
+                hrp.AssemblyLinearVelocity.Y,
+                lock.Z * (stickiness * 6)
+            )
+        end
+    end
+end)
+
+-- 3. Head Boost Engine (Feet-On-Head Listener Loop)
+local bumpOnCooldown = false
+local cdRemaining = 0
+
+local function doBumpBoost(rootPart)
+    bumpOnCooldown = true
+    local boostPwr = tonumber(_G.HubConfig.StickBump.BoostPower) or 55
+    local cdTime = tonumber(_G.HubConfig.StickBump.Cooldown) or 3
+    cdRemaining = cdTime
+
+    local bv = Instance.new("BodyVelocity")
+    bv.Velocity = Vector3.new(0, boostPwr, 0)
+    bv.MaxForce = Vector3.new(0, 9e9, 0)
+    bv.Parent = rootPart
+    task.wait(0.2)
+    bv:Destroy()
+
+    task.delay(cdTime, function()
+        bumpOnCooldown = false
+    end)
+end
+
+local function feetOnHead(myHRP, theirHead)
+    local myFeetY = myHRP.Position.Y - (myHRP.Size.Y / 2)
+    local headTopY = theirHead.Position.Y + (theirHead.Size.Y / 2)
+
+    local dy = myFeetY - headTopY
+    if dy < -0.5 or dy > 2 then return false end
+
+    local dx = math.abs(myHRP.Position.X - theirHead.Position.X)
+    local dz = math.abs(myHRP.Position.Z - theirHead.Position.Z)
+    local halfX = theirHead.Size.X / 2 + 0.5
+    local halfZ = theirHead.Size.Z / 2 + 0.5
+
+    return dx <= halfX and dz <= halfZ
+end
+
+local playerJumpStates = {}
+local playerJumpTimers = {}
+
+RunService.Heartbeat:Connect(function(dt)
+    if cdRemaining > 0 then
+        cdRemaining = math.max(0, cdRemaining - dt)
+    end
+
+    if not _G.HubConfig.StickBump or not _G.HubConfig.StickBump.Enabled or bumpOnCooldown then return end
+
+    local char, myHRP = getChar()
+    if not char or not myHRP then return end
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p == LocalPlayer then continue end
+        local pChar = p.Character
+        if not pChar then continue end
+
+        local hum = pChar:FindFirstChildOfClass("Humanoid")
+        local theirHead = pChar:FindFirstChild("Head")
+        if not hum or not theirHead then continue end
+
+        local wasJumping = playerJumpStates[p] or false
+        local isJumping = hum.FloorMaterial == Enum.Material.Air
+
+        if isJumping and not wasJumping then
+            playerJumpTimers[p] = 0.15
+        end
+
+        if playerJumpTimers[p] and playerJumpTimers[p] > 0 then
+            playerJumpTimers[p] = playerJumpTimers[p] - dt
+            if feetOnHead(myHRP, theirHead) then
+                playerJumpTimers[p] = 0
+                doBumpBoost(myHRP)
+            end
+        end
+
+        playerJumpStates[p] = isJumping
+    end
+end)
+
+Players.PlayerRemoving:Connect(function(p)
+    playerJumpStates[p] = nil
+    playerJumpTimers[p] = nil
 end)
 
 ----------------------------------------------------------------------------------
@@ -1313,7 +1501,7 @@ local function executeQBThrow()
 end
 
 ----------------------------------------------------------------------------------
--- 9. NO OOB (NO OUT OF BOUNDS) ENGINE (OPTIMIZED TO PREVENT LAG)
+-- 9. NO OOB (NO OUT OF BOUNDS) ENGINE
 ----------------------------------------------------------------------------------
 task.spawn(function()
     while task.wait(1) do
@@ -1353,7 +1541,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 ----------------------------------------------------------------------------------
--- 10. CROZO HITBOX ENGINE (COLLIDABLE HUMANOIDROOTPART SYSTEM)
+-- 10. CROZO HITBOX ENGINE (HEAD SIZE ADJUSTER)
 ----------------------------------------------------------------------------------
 local originalHitboxProperties = {}
 
@@ -1365,36 +1553,31 @@ RunService.RenderStepped:Connect(function()
 
         for _, p in ipairs(Players:GetPlayers()) do
             if p ~= LocalPlayer and p.Character then
-                local eHrp = p.Character:FindFirstChild("HumanoidRootPart")
-                if eHrp then
-                    if not originalHitboxProperties[eHrp] then
-                        originalHitboxProperties[eHrp] = {
-                            Size = eHrp.Size,
-                            Transparency = eHrp.Transparency,
-                            CanCollide = eHrp.CanCollide
+                local eHead = p.Character:FindFirstChild("Head")
+                if eHead then
+                    if not originalHitboxProperties[eHead] then
+                        originalHitboxProperties[eHead] = {
+                            Size = eHead.Size,
+                            Transparency = eHead.Transparency
                         }
                     end
 
-                    if eHrp.Size ~= targetSize then
-                        eHrp.Size = targetSize
+                    if eHead.Size ~= targetSize then
+                        eHead.Size = targetSize
                     end
-                    if eHrp.Transparency ~= transVal then
-                        eHrp.Transparency = transVal
-                    end
-                    if eHrp.CanCollide ~= true then
-                        eHrp.CanCollide = true
+                    if eHead.Transparency ~= transVal then
+                        eHead.Transparency = transVal
                     end
                 end
             end
         end
     else
         if next(originalHitboxProperties) then
-            for hrp, props in pairs(originalHitboxProperties) do
-                if hrp and hrp.Parent then
+            for head, props in pairs(originalHitboxProperties) do
+                if head and head.Parent then
                     pcall(function()
-                        hrp.Size = props.Size
-                        hrp.Transparency = props.Transparency
-                        hrp.CanCollide = props.CanCollide
+                        head.Size = props.Size
+                        head.Transparency = props.Transparency
                     end)
                 end
             end
@@ -1626,7 +1809,7 @@ ContentArea.ZIndex = 2
 
 local CyberGUI = { Tabs = {}, KeybindRegistry = {}, RefreshCallbacks = {} }
 
--- Keybind Listener System (Unblocked InputEnded)
+-- Keybind Listener System
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     local code = input.KeyCode
@@ -1990,12 +2173,18 @@ AutoStickTab:AddValueChanger("Correction Speed", _G.HubConfig.AutoStick, "CorrSp
 AutoStickTab:AddKeybinder("Auto Stick", _G.HubConfig.AutoStick, "Keybind", autoStickTgl)
 AutoStickTab:AddDivider()
 
--- 4. Stick Bump Tab
+-- 4. Stick Bump Tab (Hold Keybind Configuration)
 local StickBumpTab = CyberGUI:CreateTab("Stick Bump")
 local stickBumpTgl = StickBumpTab:AddToggle("Stick Bump", _G.HubConfig.StickBump, "Enabled")
-StickBumpTab:AddValueChanger("Bump Power", _G.HubConfig.StickBump, "Power")
-StickBumpTab:AddValueChanger("Detection Range", _G.HubConfig.StickBump, "Range")
-StickBumpTab:AddKeybinder("Stick Bump", _G.HubConfig.StickBump, "Keybind", stickBumpTgl)
+StickBumpTab:AddValueChanger("Pull Strength", _G.HubConfig.StickBump, "PullStrength")
+StickBumpTab:AddValueChanger("Stickiness", _G.HubConfig.StickBump, "Stickiness")
+StickBumpTab:AddValueChanger("Boost Power", _G.HubConfig.StickBump, "BoostPower")
+StickBumpTab:AddValueChanger("Cooldown", _G.HubConfig.StickBump, "Cooldown")
+StickBumpTab:AddValueChanger("Balance Radius", _G.HubConfig.StickBump, "BalanceRadius")
+StickBumpTab:AddValueChanger("Vertical Min", _G.HubConfig.StickBump, "VertMin")
+StickBumpTab:AddValueChanger("Vertical Max", _G.HubConfig.StickBump, "VertMax")
+StickBumpTab:AddValueChanger("Correction Speed", _G.HubConfig.StickBump, "CorrectionSpeed")
+StickBumpTab:AddKeybinder("Stick Bump", _G.HubConfig.StickBump, "Keybind", stickBumpTgl, true) -- Hold mechanic set to TRUE
 StickBumpTab:AddDivider()
 
 -- 5. Tap Bumper Tab
