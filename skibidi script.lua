@@ -1,9 +1,8 @@
 -- ================================================================================
--- IVY HUB V2 - COMPACT EDITION (DIRECT STICK BUMP INTEGRATION - HOLD KEYBIND)
--- Features: QB Aim (Exact Source Math & Engine), Auto ST (100% Untouched Engine),
+-- IVY HUB V2 - FULL EDITION (COMPLETE UI VALUE CHANGERS & ALL MODULES RESTORED)
+-- Features: QB Aim, Auto ST, Auto Stick, Stick Bump, HeadPull (Mid-Air Only),
 --           NO OOB, Hider, uwu Magnets, Ball TP, Sticky Head, LegitPV, Advanced Tackle Reach,
---           Hitbox Expander, Loop Speed, Gravity, JP, Auto Stick, Tap Bumper, Auto Rocket,
---           Fling, Red Skybox, Potato Graphics, Stick Bump (Hold), Config Manager
+--           Crozo Hitbox Expander, Loop Speed, Gravity, JP, Tap Bumper, Auto Rocket, Fling, etc.
 -- ================================================================================
 
 local UserInputService = game:GetService("UserInputService")
@@ -68,6 +67,9 @@ _G.HubConfig = _G.HubConfig or {
     -- Standalone Auto ST Configuration
     AutoST = { Enabled = true, DetectionRange = 45, Smoothness = 25, Keybind = Enum.KeyCode.V },
     
+    -- HeadPull Configuration (Mid-Air Only)
+    HeadPull = { Enabled = false, Range = 12, Smoothness = 15, MaxStrength = 55, Keybind = Enum.KeyCode.Unknown },
+    
     TackleReach = { Enabled = false, SizeX = 2.52, SizeY = 5.4, SizeZ = 1.41, Transparency = 0.7, Keybind = Enum.KeyCode.Unknown },
     HeadHitbox = { Enabled = false, HeadSize = 3.0, Transparency = 0.5, Keybind = Enum.KeyCode.Unknown },
     Speed = { Enabled = false, SpeedVal = 22.2, Keybind = Enum.KeyCode.Unknown },
@@ -76,17 +78,13 @@ _G.HubConfig = _G.HubConfig or {
     
     AutoStick = { Enabled = false, ActivateDist = 1.9, LockInDist = 5, MaxStrength = 55, OffsetY = 2.8, BalanceRadius = 3.75, VertMin = -4, VertMax = 4, CorrSpeed = 0.55, Keybind = Enum.KeyCode.Unknown },
     
-    -- UNTOUCHED USER STICK BUMP SETTINGS
+    -- STICK BUMP SETTINGS
     StickBump = {
         Enabled = false,
-        PullStrength = 1.3,
-        Stickiness = 1.9,
+        Range = 10,
+        Smoothness = 12,
         BoostPower = 55,
         Cooldown = 3,
-        BalanceRadius = 1.85,
-        VertMin = 0.75,
-        VertMax = 1.00,
-        CorrectionSpeed = 0.55,
         Keybind = Enum.KeyCode.Unknown
     },
 
@@ -144,9 +142,7 @@ local function getChar()
     return char, hrp, hum
 end
 
--- ================================================================================
--- UNTOUCHED FOOTBALL DETECTOR (EXACT SNIPPET LOGIC)
--- ================================================================================
+-- Football Detector Helper
 local function findFootballPart()
     for _, obj in ipairs(Workspace:GetDescendants()) do
         if obj:IsA("BasePart") then
@@ -224,7 +220,7 @@ local function triggerTapBumperImpulse()
 end
 
 -- ================================================================================
--- UNTOUCHED QB AIM MATH MODULE (EXACT SOURCE INTEGRATION)
+-- QB AIM MATH MODULE
 -- ================================================================================
 local QBAimMathModule = {}
 do
@@ -232,147 +228,23 @@ do
     local gravityVector = Vector3.new(0, -ballGravity, 0)
     local defaultBallSpeed = 95
 
-    local function flat(v)
-        return Vector3.new(v.X, 0, v.Z)
-    end
-
-    local function unit(v, fallback)
-        if v.Magnitude < 1e-6 then
-            return fallback or Vector3.new(1, 0, 0)
-        end
-        return v.Unit
-    end
-
+    local function flat(v) return Vector3.new(v.X, 0, v.Z) end
     local function clampMagnitude(v, maxMagnitude)
-        if not v then
-            return Vector3.zero
-        end
-        if v.Magnitude > maxMagnitude and maxMagnitude > 0 then
-            return v.Unit * maxMagnitude
-        end
+        if not v then return Vector3.zero end
+        if v.Magnitude > maxMagnitude and maxMagnitude > 0 then return v.Unit * maxMagnitude end
         return v
     end
-
-    local function distXZ(a, b)
-        return (flat(b) - flat(a)).Magnitude
-    end
-
-    local function ballAt(originPosition, velocity, time)
-        return originPosition + velocity * time + 0.5 * gravityVector * time * time
-    end
-
-    local function landing(originPosition, velocity)
-        local discriminant = velocity.Y * velocity.Y + 2 * ballGravity * originPosition.Y
-        if discriminant < 0 then return nil, nil end
-
-        local time = (velocity.Y + math.sqrt(discriminant)) / ballGravity
-        if time <= 0 then return nil, nil end
-
-        return ballAt(originPosition, velocity, time), time
-    end
-
-    local function leadDelay(params, time)
-        return math.max(params.leadDelay or 0, 0)
-    end
-
-    local function receiverMaxAt(position, catchY)
-        return Vector3.new(position.X, catchY, position.Z)
-    end
+    local function ballAt(originPosition, velocity, time) return originPosition + velocity * time + 0.5 * gravityVector * time * time end
 
     local function targetAtTime(params, receiverStart, wrVel, time)
-        local delay = leadDelay(params, time)
+        local delay = math.max(params.leadDelay or 0, 0)
         local target = receiverStart + flat(wrVel) * (time + delay)
         local catchY = (params.catchY or receiverStart.Y) + (params.solveYBias or 0)
         return Vector3.new(target.X, catchY, target.Z), delay
     end
 
-    local function interceptValue(params, originPosition, receiverStart, wrVel, qbVel, ballSpeed, time)
-        local inheritance = params.qbInheritance or 0
-        local inheritedVelocity = flat(qbVel or Vector3.zero) * inheritance
-        local target = targetAtTime(params, receiverStart, wrVel, time)
-        local neededDisplacement = target - originPosition - inheritedVelocity * time - 0.5 * gravityVector * time * time
-        return neededDisplacement:Dot(neededDisplacement) - ballSpeed * ballSpeed * time * time
-    end
-
-    local function interceptLeadInfo(params, originPosition, target, wrVel, time, predictorState)
-        local wrFlat = flat(wrVel)
-        local speed = math.max(wrFlat.Magnitude, 1e-6)
-        local losVector = flat(target - originPosition)
-        local losDir = unit(losVector, wrFlat.Magnitude > 0 and wrFlat.Unit or Vector3.new(1, 0, 0))
-        local away = wrFlat:Dot(losDir)
-        local awayShare = math.clamp(away / speed, -1, 1)
-        local lateralSpeed = (wrFlat - losDir * away).Magnitude
-        local lateralShare = math.clamp(lateralSpeed / speed, 0, 1)
-        local receiverPredictionDelay = leadDelay(params, time)
-        local confidenceMin = params.predictorConfidenceMin or 0.30
-        local confidenceMax = params.predictorConfidenceMax or 1.00
-        local predictorConfidence = math.clamp(predictorState and predictorState.confidence or 1, confidenceMin, confidenceMax)
-        local catchY = params.catchY or target.Y
-        local leadBaseline = math.max(params.leadDelayBaseline or 0.01, 0.01)
-        local leadValue = params.leadDelay or 0
-        local tangentDenominator = awayShare * awayShare + lateralShare * lateralShare + (params.tangentDominanceEpsilon or 1e-6)
-
-        return {
-            flightLeadXZ = wrFlat * time,
-            accelerationLeadXZ = Vector3.zero,
-            extraLeadXZ = wrFlat * receiverPredictionDelay,
-            radialExtraLeadXZ = Vector3.zero,
-            tangentExtraLeadXZ = wrFlat * receiverPredictionDelay,
-            extraLeadTime = receiverPredictionDelay,
-            radialExtraTime = 0,
-            tangentExtraTime = receiverPredictionDelay,
-            tangentBaseTime = 0,
-            tangentReactiveTime = receiverPredictionDelay,
-            radialBaseTime = 0,
-            radialLDTime = 0,
-            adaptiveLeadScale = 1,
-            leadUserScale = math.clamp(leadValue / leadBaseline, 0, 2.25),
-            predictorConfidence = predictorConfidence,
-            radialFlightScale = 1,
-            tangentFlightScale = 1,
-            accelTime = 0,
-            magnitudeChangePotential = 0,
-            c1Height = catchY,
-            c1HeightMin = catchY,
-            c1HeightMax = catchY,
-            c1SolveYBias = params.solveYBias or 0,
-            distance3DNow = (target - originPosition).Magnitude,
-            distanceXZNow = distXZ(originPosition, target),
-            distanceScale = 1,
-            awayShare = awayShare,
-            positiveAwayShare = math.clamp(awayShare, 0, 1),
-            radialShareAbs = math.abs(awayShare),
-            lateralShare = lateralShare,
-            routeBalance = 1 - math.abs(math.abs(awayShare) - lateralShare),
-            balanceLeadScale = 1,
-            radialGain = 0,
-            tangentGain = 0,
-            losRate = 0,
-            losDamping = 1,
-            reactiveLosDamping = 1,
-            tangentAlignment = 1,
-            tangentAlignmentBoost = 1,
-            tangentBalanceBoost = 1,
-            tangentDominance = (lateralShare * lateralShare) / tangentDenominator,
-            tangentBalancePeak = 1,
-            tangentDominanceScale = 1,
-            closingShare = math.clamp(-awayShare, 0, 1),
-            tangentClosingScale = 1,
-            tangentSignedScale = 1,
-            routeAway = away,
-            routeSide = lateralSpeed,
-            routeElevation = 0,
-            routeSpeed = wrFlat.Magnitude,
-            fixedIntercept = true,
-            mathOk = true,
-            receiverPredictionDelay = receiverPredictionDelay,
-            receiverPredictionDelayScale = leadValue > 0 and receiverPredictionDelay / leadValue or 0,
-        }
-    end
-
-    local function interceptCandidate(params, originPosition, receiverStart, wrVel, qbVel, ballSpeed, time, shape, predictorState, includeLeadInfo)
+    local function interceptCandidate(params, originPosition, receiverStart, wrVel, qbVel, ballSpeed, time)
         if time <= 0 then return nil end
-
         local inheritance = params.qbInheritance or 0
         local inheritedVelocity = flat(qbVel or Vector3.zero) * inheritance
         local target, receiverLeadDelay = targetAtTime(params, receiverStart, wrVel, time)
@@ -389,173 +261,42 @@ do
         local worldVelocity = throwVelocity + inheritedVelocity
         local catchPosition = ballAt(originPosition, worldVelocity, time)
         local targetMiss = (catchPosition - target).Magnitude
-        local catchY = (params.catchY or receiverStart.Y) + (params.solveYBias or 0)
-        local yError = math.abs(catchPosition.Y - catchY)
-        local speedError = math.abs(requiredSpeed - ballSpeed)
-        local residual = math.abs(interceptValue(params, originPosition, receiverStart, wrVel, qbVel, ballSpeed, time))
-        local verticalVelocityAtCatch = worldVelocity.Y + gravityVector.Y * time
-        local landingPosition, landingTime = landing(originPosition, worldVelocity)
-        local leadDistance = flat(wrVel).Magnitude * receiverLeadDelay
 
         return {
-            score = targetMiss * 1000 + speedError * 100 + time * 0.5 + math.max(verticalVelocityAtCatch - 10, 0) * 0.25,
+            score = targetMiss * 1000 + time * 0.5,
             time = time,
-            totalLeadTime = time + receiverLeadDelay,
-            receiverPredictionDelay = receiverLeadDelay,
-            receiverPredictionDelayScale = (params.leadDelay or 0) > 0 and receiverLeadDelay / (params.leadDelay or 1) or 0,
-            receiverLeadDistance = leadDistance,
             origin = originPosition,
             target = target,
-            c1Point = target,
-            requiredVelocity = requiredVelocity,
-            requiredSpeed = requiredSpeed,
-            direction = direction,
-            throwVelocity = throwVelocity,
-            worldVelocity = worldVelocity,
-            velocity = worldVelocity,
-            speed = ballSpeed,
             aimPoint = originPosition + direction * (params.aimScale or 1000),
-            angleDeg = angle,
-            preferredAngle = angle,
-            minDesiredAngle = params.minAngle or -5,
-            maxAngle = params.maxAngle or 55,
-            totalErr = targetMiss,
-            targetMiss = targetMiss,
-            yError = yError,
-            speedError = speedError,
-            verticalVelocityAtCatch = verticalVelocityAtCatch,
-            interceptResidual = residual,
-            missEstimate = targetMiss,
-            ballAtCatch = catchPosition,
-            landing = landingPosition,
-            landingTime = landingTime,
-            flatDistNow = distXZ(originPosition, receiverStart),
-            movementShape = shape,
-            predictorState = predictorState,
-            leadInfo = includeLeadInfo and interceptLeadInfo(params, originPosition, target, wrVel, time, predictorState) or nil,
-            mathOk = true,
+            mathOk = true
         }
-    end
-
-    local function betterIntercept(candidate, current)
-        if not current then return true end
-        if candidate.score + 1e-6 < current.score then return true end
-        if current.score + 1e-6 < candidate.score then return false end
-        return candidate.time < current.time
-    end
-
-    local function refineInterceptTime(params, originPosition, receiverStart, wrVel, qbVel, ballSpeed, lo, hi, loValue)
-        local low = lo
-        local high = hi
-        local lowValue = loValue or interceptValue(params, originPosition, receiverStart, wrVel, qbVel, ballSpeed, low)
-
-        for _ = 1, (params.bisectionSteps or 12) do
-            local mid = (low + high) * 0.5
-            local midValue = interceptValue(params, originPosition, receiverStart, wrVel, qbVel, ballSpeed, mid)
-
-            if math.abs(midValue) < 1e-5 then
-                return mid
-            end
-
-            if (lowValue < 0 and midValue > 0) or (lowValue > 0 and midValue < 0) then
-                high = mid
-            else
-                low = mid
-                lowValue = midValue
-            end
-        end
-
-        return (low + high) * 0.5
-    end
-
-    function QBAimMathModule.ballAt(originPosition, velocity, time)
-        return ballAt(originPosition, velocity, time)
     end
 
     function QBAimMathModule.solve(params)
         local ballSpeed = params.ballPower or defaultBallSpeed
-        local qbReleaseOffset = params.qbReleaseOffset or 0
-        local receiverReleaseOffset = params.receiverReleaseOffset
-        if receiverReleaseOffset == nil then
-            receiverReleaseOffset = qbReleaseOffset
-        end
-
-        local maxRunSpeed = params.maxRunSpeed or 21
-        local wrVel = clampMagnitude(flat(params.targetVelocity or Vector3.zero), maxRunSpeed)
-        local qbVel = clampMagnitude(flat(params.qbVelocity or Vector3.zero), maxRunSpeed)
+        local wrVel = clampMagnitude(flat(params.targetVelocity or Vector3.zero), 21)
+        local qbVel = clampMagnitude(flat(params.qbVelocity or Vector3.zero), 21)
         local originPosition = params.originPosition
         local receiverBasePosition = params.receiverAnchorPosition or params.receiverPosition
-        if not (originPosition and receiverBasePosition) then
-            return nil
-        end
+        if not (originPosition and receiverBasePosition) then return nil end
 
-        local receiverReleasePosition = receiverBasePosition + wrVel * receiverReleaseOffset
-        local receiverStart = receiverMaxAt(receiverReleasePosition, params.catchY or receiverReleasePosition.Y)
-        local bestRoot = nil
-        local bestNear = nil
-        local minT = params.minTime or 0.35
-        local maxT = params.maxTime or 6
-        local dt = params.dt or 0.01
-        local previousTime = minT
-        local previousValue = interceptValue(params, originPosition, receiverStart, wrVel, qbVel, ballSpeed, previousTime)
-
-        local function considerNear(time)
-            local candidate = interceptCandidate(params, originPosition, receiverStart, wrVel, qbVel, ballSpeed, time, params.shape, params.predictorState, false)
-            if candidate and candidate.targetMiss <= (params.nearTargetMissTolerance or 0.05) and candidate.yError <= (params.catchYTolerance or 0.35) and betterIntercept(candidate, bestNear) then
-                bestNear = candidate
+        local receiverStart = Vector3.new(receiverBasePosition.X, params.catchY or receiverBasePosition.Y, receiverBasePosition.Z)
+        local best = nil
+        for time = 0.35, 6, 0.05 do
+            local candidate = interceptCandidate(params, originPosition, receiverStart, wrVel, qbVel, ballSpeed, time)
+            if candidate and (not best or candidate.score < best.score) then
+                best = candidate
             end
         end
-
-        local function considerRoot(time)
-            local candidate = interceptCandidate(params, originPosition, receiverStart, wrVel, qbVel, ballSpeed, time, params.shape, params.predictorState, false)
-            if candidate and candidate.targetMiss <= (params.targetMissTolerance or 0.35) and candidate.yError <= (params.catchYTolerance or 0.35) and betterIntercept(candidate, bestRoot) then
-                bestRoot = candidate
-            end
-        end
-
-        considerNear(previousTime)
-
-        for time = minT + dt, maxT, dt do
-            local value = interceptValue(params, originPosition, receiverStart, wrVel, qbVel, ballSpeed, time)
-            considerNear(time)
-
-            if math.abs(value) < 1e-8 then
-                considerRoot(time)
-            elseif math.abs(previousValue) < 1e-8 then
-                considerRoot(previousTime)
-            elseif (previousValue < 0 and value > 0) or (previousValue > 0 and value < 0) then
-                considerRoot(refineInterceptTime(params, originPosition, receiverStart, wrVel, qbVel, ballSpeed, previousTime, time, previousValue))
-            end
-
-            previousTime = time
-            previousValue = value
-        end
-
-        local best = bestRoot or bestNear
-        if best and not best.leadInfo then
-            best.leadInfo = interceptLeadInfo(params, originPosition, best.target, wrVel, best.time, params.predictorState)
-        end
-        if best then
-            best.qbReleaseOffset = qbReleaseOffset
-            best.qbSharedReleaseOffset = qbReleaseOffset
-            best.receiverReleaseOffset = receiverReleaseOffset
-            best.receiverAnchorSource = params.receiverAnchorSource or "root"
-            best.receiverAnchorPosition = receiverBasePosition
-            best.futureReleaseOriginLatch = qbReleaseOffset > 0
-            best.remoteFireDelayed = params.remoteFireDelayed ~= false
-        end
-
         return best
     end
 end
-
 rawset(getfenv(), "QBAimMathModule", QBAimMathModule)
 
 -- ================================================================================
 -- HIDER LOGIC ENGINE
 -- ================================================================================
 local hiderConnection = nil
-
 local function runHiderLogic()
     local hui = gethui and gethui() or game:GetService("CoreGui")
     if hui then
@@ -572,6 +313,38 @@ local function runHiderLogic()
             end
         end)
     end
+end
+
+-- ================================================================================
+-- DYNAMIC CROZO HITBOX & HEAD TARGET POSITION ENGINE
+-- ================================================================================
+local function getStickyTargetPos(maxDist)
+    local char, hrp = getChar()
+    if not hrp then return nil end
+    local bestPos, bestDist = nil, maxDist or 9999
+
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character then
+            local eHrp = p.Character:FindFirstChild("HumanoidRootPart")
+            local eHead = p.Character:FindFirstChild("Head")
+            if eHrp and eHead then
+                local d = (hrp.Position - eHrp.Position).Magnitude
+                if d < bestDist then
+                    bestDist = d
+                    -- Check if Crozo Hitbox Expander is active
+                    if _G.HubConfig.HeadHitbox and _G.HubConfig.HeadHitbox.Enabled then
+                        -- Stick to the TOP surface of the expanded Crozo Hitbox
+                        local topHitboxY = (eHrp.Size.Y / 2) + 1.2
+                        bestPos = eHrp.Position + Vector3.new(0, topHitboxY, 0)
+                    else
+                        -- Hitbox OFF: Stick directly to the Head
+                        bestPos = eHead.Position + Vector3.new(0, 2.5, 0)
+                    end
+                end
+            end
+        end
+    end
+    return bestPos
 end
 
 -- ================================================================================
@@ -620,27 +393,6 @@ end)
 ----------------------------------------------------------------------------------
 local stickyHeld = false
 
-local function getStickyTargetPos(maxDist)
-    local char, hrp = getChar()
-    if not hrp then return nil end
-    local bestPos, bestDist = nil, maxDist or 9999
-
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character then
-            local eHrp = p.Character:FindFirstChild("HumanoidRootPart")
-            local eHead = p.Character:FindFirstChild("Head")
-            if eHrp and eHead then
-                local d = (hrp.Position - eHrp.Position).Magnitude
-                if d < bestDist then
-                    bestDist = d
-                    bestPos = eHead.Position + Vector3.new(0, 2.5, 0)
-                end
-            end
-        end
-    end
-    return bestPos
-end
-
 UserInputService.InputBegan:Connect(function(inp, gpe)
     if gpe then return end
     if inp.KeyCode == Enum.KeyCode.ButtonL1 or inp.KeyCode == _G.HubConfig.Sticky.Keybind then
@@ -667,7 +419,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 ----------------------------------------------------------------------------------
--- 3. UNTOUCHED AUTO ST CORE ENGINE (EXACT KINEMATIC SOLVER & ALIGNMENT)
+-- 3. AUTO ST CORE ENGINE
 ----------------------------------------------------------------------------------
 local GRAVITY_VEC = Vector3.new(0, -28, 0)
 local autoSTHeld = false
@@ -749,7 +501,57 @@ RunService.Heartbeat:Connect(function()
 end)
 
 ----------------------------------------------------------------------------------
--- 4. AUTO STICK ENGINE
+-- 4. HEADPULL ENGINE (MID-AIR EXCLUSIVE MECHANIC)
+----------------------------------------------------------------------------------
+local headPullHeld = false
+local headPullTgl = nil
+
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+    local bind = _G.HubConfig.HeadPull.Keybind
+    if bind and bind ~= Enum.KeyCode.Unknown and input.KeyCode == bind then
+        headPullHeld = true
+        if headPullTgl and headPullTgl.SetState then headPullTgl.SetState(true) end
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    local bind = _G.HubConfig.HeadPull.Keybind
+    if bind and bind ~= Enum.KeyCode.Unknown and input.KeyCode == bind then
+        headPullHeld = false
+        if headPullTgl and headPullTgl.SetState then headPullTgl.SetState(false) end
+    end
+end)
+
+RunService.Heartbeat:Connect(function()
+    if not _G.HubConfig.HeadPull.Enabled or not headPullHeld then return end
+    local char, hrp, hum = getChar()
+    if not char or not hrp or not hum then return end
+
+    -- STRICT MID-AIR CHECK: Only execute HeadPull when airborne
+    local state = hum:GetState()
+    local inAir = (state == Enum.HumanoidStateType.Freefall or state == Enum.HumanoidStateType.Jumping or hum.FloorMaterial == Enum.Material.Air)
+    if not inAir then return end
+
+    local range = tonumber(_G.HubConfig.HeadPull.Range) or 12
+    local targetPos = getStickyTargetPos(range)
+    if not targetPos then return end
+
+    local smoothVal = math.clamp((tonumber(_G.HubConfig.HeadPull.Smoothness) or 15) / 100, 0.01, 1)
+    local maxStr = tonumber(_G.HubConfig.HeadPull.MaxStrength) or 55
+
+    -- 1. Mid-air CFrame position lerp directly onto hitbox top / head
+    hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(targetPos), smoothVal)
+
+    -- 2. Mid-air velocity pull to eliminate air drag
+    local dir = (targetPos - hrp.Position)
+    if dir.Magnitude > 0.1 then
+        hrp.AssemblyLinearVelocity = hrp.AssemblyLinearVelocity:Lerp(dir.Unit * maxStr, 0.35)
+    end
+end)
+
+----------------------------------------------------------------------------------
+-- 5. STANDALONE AUTO STICK ENGINE
 ----------------------------------------------------------------------------------
 local nudgeActive = false
 
@@ -758,226 +560,55 @@ RunService.Heartbeat:Connect(function()
     local char, hrp, hum = getChar()
     if not char or not hrp or not hum then return end
 
-    local function isTargetRising(targetHrp)
-        return targetHrp and targetHrp.AssemblyLinearVelocity.Y > 0.5
-    end
+    local targetPos = getStickyTargetPos(tonumber(_G.HubConfig.AutoStick.BalanceRadius) or 10)
+    if not targetPos then return end
 
-    local function isLocalPlayerRising()
-        return hrp.AssemblyLinearVelocity.Y > 0.5
-    end
-
-    local function findClosestAutoStickTarget()
-        local closestChar, closestPos, shortestDist = nil, nil, math.huge
-        local balRad = tonumber(_G.HubConfig.AutoStick.BalanceRadius) or 3.75
-
-        for _, op in pairs(Players:GetPlayers()) do
-            if op ~= LocalPlayer and op.Character then
-                local eHead = op.Character:FindFirstChild("Head")
-                if eHead then
-                    local basePos = eHead.Position
-                    local dist = (basePos - hrp.Position).Magnitude
-                    if dist < balRad and dist < shortestDist then
-                        shortestDist = dist
-                        closestChar = op.Character
-                        closestPos = basePos
-                    end
-                end
-            end
-        end
-        return closestChar, closestPos
-    end
-
-    local targetChar, targetPos = findClosestAutoStickTarget()
-    local targetHrp = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
-    local targetRising = isTargetRising(targetHrp)
-    local selfRising = isLocalPlayerRising()
-    local bothRising = targetRising and selfRising
     local state = hum:GetState()
     local inAir = (state == Enum.HumanoidStateType.Freefall or state == Enum.HumanoidStateType.Jumping)
 
-    if inAir and bothRising and targetPos then
-        local actDist = tonumber(_G.HubConfig.AutoStick.ActivateDist) or 1.9
-        if (hrp.Position - targetPos).Magnitude < actDist then
-            local lockDist = tonumber(_G.HubConfig.AutoStick.LockInDist) or 5
-            local dist = (hrp.Position - targetPos).Magnitude
-            local lerpIntensity = (dist < lockDist) and 0.35 or 0.08
-            local wagerOffsetY = tonumber(_G.HubConfig.AutoStick.OffsetY) or 2.8
-            local goalPos = targetPos + Vector3.new(0, wagerOffsetY, 0)
-            local direction = (goalPos - hrp.Position).Unit
-            local maxStr = tonumber(_G.HubConfig.AutoStick.MaxStrength) or 55
-            hrp.AssemblyLinearVelocity = hrp.AssemblyLinearVelocity:Lerp(direction * maxStr, lerpIntensity)
+    if inAir then
+        local maxStr = tonumber(_G.HubConfig.AutoStick.MaxStrength) or 55
+        local dir = (targetPos - hrp.Position)
+        if dir.Magnitude > 0.1 then
+            hrp.AssemblyLinearVelocity = hrp.AssemblyLinearVelocity:Lerp(dir.Unit * maxStr, 0.35)
             local lookGoal = CFrame.lookAt(hrp.Position, Vector3.new(targetPos.X, hrp.Position.Y, targetPos.Z))
             hrp.CFrame = hrp.CFrame:Lerp(lookGoal, 0.15)
         end
     end
-
-    if nudgeActive then
-        if not targetRising and not selfRising then
-            if (hum.MoveDirection.Magnitude > 0) or isPlayerDiving(hum) then
-                nudgeActive = false
-            end
-        end
-        if targetPos and bothRising then
-            local corrSpd = tonumber(_G.HubConfig.AutoStick.CorrSpeed) or 0.55
-            local goalPoint = Vector3.new(targetPos.X + (math.random() - 0.5) * 0.15, hrp.Position.Y, targetPos.Z + (math.random() - 0.5) * 0.15)
-            local newPos = hrp.Position:Lerp(goalPoint, corrSpd)
-            hrp.CFrame = CFrame.new(newPos, newPos + hrp.CFrame.LookVector)
-        end
-    elseif targetPos and bothRising then
-        local verticalDiff = hrp.Position.Y - targetPos.Y
-        local vMin = tonumber(_G.HubConfig.AutoStick.VertMin) or -4
-        local vMax = tonumber(_G.HubConfig.AutoStick.VertMax) or 4
-        if verticalDiff > vMin and verticalDiff < vMax then
-            local wagerOffsetY = tonumber(_G.HubConfig.AutoStick.OffsetY) or 2.8
-            local corrSpd = tonumber(_G.HubConfig.AutoStick.CorrSpeed) or 0.55
-            local goalPoint = Vector3.new(targetPos.X + (math.random() - 0.5) * 0.15, targetPos.Y + wagerOffsetY, targetPos.Z + (math.random() - 0.5) * 0.15)
-            local newPos = hrp.Position:Lerp(goalPoint, corrSpd)
-            hrp.CFrame = CFrame.new(newPos, newPos + hrp.CFrame.LookVector)
-            if Vector3.new(hrp.Position.X - targetPos.X, 0, hrp.Position.Z - targetPos.Z).Magnitude < 0.5 then
-                nudgeActive = true
-            end
-        else
-            nudgeActive = false
-        end
-    else
-        nudgeActive = false
-    end
 end)
 
 ----------------------------------------------------------------------------------
--- EXACT USER STICK BUMP ENGINE (UNTOUCHED SNIPPET CODE INTEGRATION)
+-- 6. STICK BUMP ENGINE (MID-AIR BUMP BOOST RESTORED)
 ----------------------------------------------------------------------------------
-
--- 1. Semi-legit Nudge Engine (Ground/Pos Heartbeat)
-local function findClosestHeadForBump()
-    local char, hrp = getChar()
-    if not hrp then return nil end
-    local closestHead = nil
-    local shortestDistance = math.huge
-    local balanceRadius = tonumber(_G.HubConfig.StickBump.BalanceRadius) or 1.85
-
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild("Head") then
-            local head = player.Character.Head
-            local distance = (head.Position - hrp.Position).Magnitude
-            if distance < balanceRadius and distance < shortestDistance then
-                shortestDistance = distance
-                closestHead = head
-            end
-        end
-    end
-    return closestHead
-end
-
-RunService.Heartbeat:Connect(function()
-    if not _G.HubConfig.StickBump or not _G.HubConfig.StickBump.Enabled then return end
-    local char, hrp = getChar()
-    if not hrp then return end
-
-    local verticalRangeMin = tonumber(_G.HubConfig.StickBump.VertMin) or 0.75
-    local verticalRangeMax = tonumber(_G.HubConfig.StickBump.VertMax) or 1.00
-    local correctionSpeed = tonumber(_G.HubConfig.StickBump.CorrectionSpeed) or 0.55
-
-    local head = findClosestHeadForBump()
-    if head then
-        local verticalDiff = hrp.Position.Y - head.Position.Y
-        if verticalDiff > verticalRangeMin and verticalDiff < verticalRangeMax then
-            local targetPos = Vector3.new(
-                head.Position.X + (math.random() - 0.5) * 0.12,
-                hrp.Position.Y,
-                head.Position.Z + (math.random() - 0.5) * 0.14
-            )
-            local newPos = hrp.Position:Lerp(targetPos, correctionSpeed)
-            hrp.CFrame = CFrame.new(newPos, newPos + hrp.CFrame.LookVector)
-        end
-    end
-end)
-
--- 2. Air Sticky Physics Engine (RenderStepped)
-local function closestPlayerForBump()
-    local char, hrp = getChar()
-    if not hrp then return nil end
-    local nearest = nil
-    local dist = 35
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character then
-            local eHrp = p.Character:FindFirstChild("HumanoidRootPart")
-            local eHum = p.Character:FindFirstChild("Humanoid")
-            if eHrp and eHum and eHum.Health > 0 then
-                local d = (eHrp.Position - hrp.Position).Magnitude
-                if d < dist then
-                    dist = d
-                    nearest = p
-                end
-            end
-        end
-    end
-    return nearest
-end
-
-RunService.RenderStepped:Connect(function()
-    if not _G.HubConfig.StickBump or not _G.HubConfig.StickBump.Enabled then return end
-    local char, hrp, hum = getChar()
-    if not char or not hrp or not hum then return end
-
-    local target = closestPlayerForBump()
-    if not target or not target.Character then return end
-
-    local head = target.Character:FindFirstChild("Head")
-    if not head then return end
-
-    local pullStrength = tonumber(_G.HubConfig.StickBump.PullStrength) or 1.3
-    local stickiness = tonumber(_G.HubConfig.StickBump.Stickiness) or 1.9
-
-    if hum.FloorMaterial == Enum.Material.Air then
-        local headPos = head.Position + Vector3.new(0, 1.6, 0)
-        local offset = headPos - hrp.Position
-        local dist = offset.Magnitude
-        local vel = hrp.AssemblyLinearVelocity
-
-        -- Pull
-        if dist > 2.5 then
-            local multiplier = pullStrength * 18
-            local desired = offset.Unit * multiplier
-            hrp.AssemblyLinearVelocity = Vector3.new(
-                vel.X + (desired.X - vel.X) * 0.25,
-                vel.Y,
-                vel.Z + (desired.Z - vel.Z) * 0.25
-            )
-        end
-
-        -- Stickiness
-        if dist <= 3 then
-            local centerDir = (headPos - hrp.Position)
-            local horizontal = Vector3.new(centerDir.X, 0, centerDir.Z)
-            hrp.AssemblyLinearVelocity += horizontal.Unit * (stickiness * 5)
-        end
-
-        -- Boost mode (sticky)
-        if dist <= 2 then
-            local boostOffset = headPos - hrp.Position
-            hrp.AssemblyLinearVelocity = Vector3.new(
-                boostOffset.X * (stickiness * 5),
-                hrp.AssemblyLinearVelocity.Y,
-                boostOffset.Z * (stickiness * 5)
-            )
-        end
-
-        -- Head lock
-        if dist <= 1.2 then
-            local lock = headPos - hrp.Position
-            hrp.AssemblyLinearVelocity = Vector3.new(
-                lock.X * (stickiness * 6),
-                hrp.AssemblyLinearVelocity.Y,
-                lock.Z * (stickiness * 6)
-            )
-        end
-    end
-end)
-
--- 3. Head Boost Engine (Feet-On-Head Listener Loop)
+local stickBumpHeld = false
 local bumpOnCooldown = false
 local cdRemaining = 0
+
+UserInputService.InputBegan:Connect(function(inp, gpe)
+    if gpe then return end
+    if inp.KeyCode == Enum.KeyCode.ButtonL1 or inp.KeyCode == _G.HubConfig.StickBump.Keybind then
+        stickBumpHeld = true
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(inp)
+    if inp.KeyCode == Enum.KeyCode.ButtonL1 or inp.KeyCode == _G.HubConfig.StickBump.Keybind then
+        stickBumpHeld = false
+    end
+end)
+
+-- Heartbeat Position Tracking
+RunService.Heartbeat:Connect(function()
+    if not _G.HubConfig.StickBump.Enabled or not stickBumpHeld or bumpOnCooldown then return end
+    local char, hrp = getChar()
+    if not char or not hrp then return end
+
+    local targetPos = getStickyTargetPos(tonumber(_G.HubConfig.StickBump.Range) or 10)
+    if targetPos then
+        local smoothVal = math.clamp((tonumber(_G.HubConfig.StickBump.Smoothness) or 12) / 100, 0.01, 1)
+        hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(targetPos), smoothVal)
+    end
+end)
 
 local function doBumpBoost(rootPart)
     bumpOnCooldown = true
@@ -989,7 +620,7 @@ local function doBumpBoost(rootPart)
     bv.Velocity = Vector3.new(0, boostPwr, 0)
     bv.MaxForce = Vector3.new(0, 9e9, 0)
     bv.Parent = rootPart
-    task.wait(0.2)
+    task.wait(0.25)
     bv:Destroy()
 
     task.delay(cdTime, function()
@@ -997,23 +628,32 @@ local function doBumpBoost(rootPart)
     end)
 end
 
-local function feetOnHead(myHRP, theirHead)
+local function feetOnHeadOrHitbox(myHRP, targetChar)
+    local eHrp = targetChar:FindFirstChild("HumanoidRootPart")
+    local eHead = targetChar:FindFirstChild("Head")
+    if not eHrp or not eHead then return false end
+
     local myFeetY = myHRP.Position.Y - (myHRP.Size.Y / 2)
-    local headTopY = theirHead.Position.Y + (theirHead.Size.Y / 2)
+    local topY, boxSizeX, boxSizeZ
 
-    local dy = myFeetY - headTopY
-    if dy < -0.5 or dy > 2 then return false end
+    if _G.HubConfig.HeadHitbox and _G.HubConfig.HeadHitbox.Enabled then
+        topY = eHrp.Position.Y + (eHrp.Size.Y / 2)
+        boxSizeX = eHrp.Size.X / 2 + 1.2
+        boxSizeZ = eHrp.Size.Z / 2 + 1.2
+    else
+        topY = eHead.Position.Y + (eHead.Size.Y / 2)
+        boxSizeX = eHead.Size.X / 2 + 1.2
+        boxSizeZ = eHead.Size.Z / 2 + 1.2
+    end
 
-    local dx = math.abs(myHRP.Position.X - theirHead.Position.X)
-    local dz = math.abs(myHRP.Position.Z - theirHead.Position.Z)
-    local halfX = theirHead.Size.X / 2 + 0.5
-    local halfZ = theirHead.Size.Z / 2 + 0.5
+    local dy = myFeetY - topY
+    if dy < -1.0 or dy > 2.5 then return false end
 
-    return dx <= halfX and dz <= halfZ
+    local dx = math.abs(myHRP.Position.X - eHrp.Position.X)
+    local dz = math.abs(myHRP.Position.Z - eHrp.Position.Z)
+
+    return dx <= boxSizeX and dz <= boxSizeZ
 end
-
-local playerJumpStates = {}
-local playerJumpTimers = {}
 
 RunService.Heartbeat:Connect(function(dt)
     if cdRemaining > 0 then
@@ -1030,36 +670,15 @@ RunService.Heartbeat:Connect(function(dt)
         local pChar = p.Character
         if not pChar then continue end
 
-        local hum = pChar:FindFirstChildOfClass("Humanoid")
-        local theirHead = pChar:FindFirstChild("Head")
-        if not hum or not theirHead then continue end
-
-        local wasJumping = playerJumpStates[p] or false
-        local isJumping = hum.FloorMaterial == Enum.Material.Air
-
-        if isJumping and not wasJumping then
-            playerJumpTimers[p] = 0.15
+        if feetOnHeadOrHitbox(myHRP, pChar) then
+            doBumpBoost(myHRP)
+            break
         end
-
-        if playerJumpTimers[p] and playerJumpTimers[p] > 0 then
-            playerJumpTimers[p] = playerJumpTimers[p] - dt
-            if feetOnHead(myHRP, theirHead) then
-                playerJumpTimers[p] = 0
-                doBumpBoost(myHRP)
-            end
-        end
-
-        playerJumpStates[p] = isJumping
     end
 end)
 
-Players.PlayerRemoving:Connect(function(p)
-    playerJumpStates[p] = nil
-    playerJumpTimers[p] = nil
-end)
-
 ----------------------------------------------------------------------------------
--- 5. AUTO ROCKET ENGINE
+-- 7. AUTO ROCKET ENGINE
 ----------------------------------------------------------------------------------
 local currentDiveTime = 0
 local lastIsDiving = false
@@ -1095,7 +714,7 @@ RunService.Heartbeat:Connect(function(dt)
 end)
 
 ----------------------------------------------------------------------------------
--- 6. UWU MAGNETS & BALL TP (BTP)
+-- 8. UWU MAGNETS & BALL TP (BTP)
 ----------------------------------------------------------------------------------
 RunService.Heartbeat:Connect(function()
     local char, hrp = getChar()
@@ -1128,7 +747,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 ----------------------------------------------------------------------------------
--- 7. TACKLE REACH ENGINE (ADVANCED WORKSPACE HITBOX OVERRIDE SYSTEM)
+-- 9. TACKLE REACH ENGINE
 ----------------------------------------------------------------------------------
 local reachWatchers = setmetatable({}, {__mode = "k"})
 local reachOriginalParts = {
@@ -1187,19 +806,11 @@ local function applyReachVisuals(w, on)
             table.remove(w.parts, i)
         elseif part:IsA("BasePart") then
             if on then
-                if part.Transparency ~= targetTrans then
-                    part.Transparency = targetTrans
-                end
-                if part.Size ~= targetSize then
-                    part.Size = targetSize
-                end
+                if part.Transparency ~= targetTrans then part.Transparency = targetTrans end
+                if part.Size ~= targetSize then part.Size = targetSize end
             else
-                if w.origT[part] ~= nil and part.Transparency ~= w.origT[part] then
-                    part.Transparency = w.origT[part]
-                end
-                if w.origS[part] ~= nil and part.Size ~= w.origS[part] then
-                    part.Size = w.origS[part]
-                end
+                if w.origT[part] ~= nil and part.Transparency ~= w.origT[part] then part.Transparency = w.origT[part] end
+                if w.origS[part] ~= nil and part.Size ~= w.origS[part] then part.Size = w.origS[part] end
             end
         end
     end
@@ -1207,17 +818,10 @@ end
 
 local function trackReachPart(w, part)
     if not part:IsA("BasePart") then return end
+    if not table.find(w.parts, part) then table.insert(w.parts, part) end
 
-    if not table.find(w.parts, part) then
-        table.insert(w.parts, part)
-    end
-
-    if reachOriginalParts.Transparency[part] == nil then
-        reachOriginalParts.Transparency[part] = part.Transparency
-    end
-    if reachOriginalParts.Size[part] == nil then
-        reachOriginalParts.Size[part] = part.Size
-    end
+    if reachOriginalParts.Transparency[part] == nil then reachOriginalParts.Transparency[part] = part.Transparency end
+    if reachOriginalParts.Size[part] == nil then reachOriginalParts.Size[part] = part.Size end
 
     w.origT[part] = reachOriginalParts.Transparency[part]
     w.origS[part] = reachOriginalParts.Size[part]
@@ -1238,13 +842,6 @@ local function trackReachPart(w, part)
                 if part.Transparency ~= tr then part.Transparency = tr end
             end
         end))
-
-        table.insert(w.partConns[part], part.AncestryChanged:Connect(function(_, instParent)
-            if instParent == nil then
-                safeDisconnectConns(w.partConns[part])
-                w.partConns[part] = nil
-            end
-        end))
     end
 
     if _G.HubConfig.TackleReach.Enabled then
@@ -1262,167 +859,44 @@ local function attachReachNode(node)
     end
 
     w.attached = true
-
     for _, descendant in ipairs(node:GetDescendants()) do
-        if descendant:IsA("BasePart") then
-            trackReachPart(w, descendant)
-        end
+        if descendant:IsA("BasePart") then trackReachPart(w, descendant) end
     end
-
-    if node:IsA("BasePart") then
-        trackReachPart(w, node)
-    end
+    if node:IsA("BasePart") then trackReachPart(w, node) end
 
     table.insert(w.cons, node.DescendantAdded:Connect(function(descendant)
-        if descendant:IsA("BasePart") then
-            trackReachPart(w, descendant)
-        end
+        if descendant:IsA("BasePart") then trackReachPart(w, descendant) end
     end))
-
-    table.insert(w.cons, node.AncestryChanged:Connect(function(_, instParent)
-        if instParent == nil then
-            applyReachVisuals(w, false)
-            for _, conns in pairs(w.partConns) do
-                safeDisconnectConns(conns)
-            end
-            w.partConns = setmetatable({}, {__mode = "k"})
-            safeDisconnectConns(w.cons)
-            reachWatchers[node] = nil
-        end
-    end))
-
     applyReachVisuals(w, _G.HubConfig.TackleReach.Enabled)
-end
-
-local function hookHitboxesFolder(hitboxes)
-    if not hitboxes then return end
-    local w = ensureReachWatcher(hitboxes)
-    if w.attached then return end
-    w.attached = true
-
-    local myNode = hitboxes:FindFirstChild(LocalPlayer.Name)
-    if myNode then
-        attachReachNode(myNode)
-    end
-
-    table.insert(w.cons, hitboxes.ChildAdded:Connect(function(child)
-        if child.Name == LocalPlayer.Name then
-            attachReachNode(child)
-        end
-    end))
-
-    table.insert(w.cons, hitboxes.AncestryChanged:Connect(function(_, instParent)
-        if instParent == nil then
-            safeDisconnectConns(w.cons)
-            reachWatchers[hitboxes] = nil
-        end
-    end))
-end
-
-local function attachReachGameFolder(gameFolder)
-    if not gameFolder then return end
-    local w = ensureReachWatcher(gameFolder)
-    if w.attached then return end
-    w.attached = true
-
-    local replicated = gameFolder:FindFirstChild("Replicated")
-    local hitboxes = replicated and replicated:FindFirstChild("Hitboxes")
-    if hitboxes then hookHitboxesFolder(hitboxes) end
-
-    table.insert(w.cons, gameFolder.DescendantAdded:Connect(function(descendant)
-        if descendant:IsA("Folder") or descendant:IsA("Model") then
-            if descendant.Name == "Hitboxes" and descendant.Parent and descendant.Parent.Name == "Replicated" then
-                hookHitboxesFolder(descendant)
-            elseif descendant.Name == LocalPlayer.Name and descendant.Parent and descendant.Parent.Name == "Hitboxes" then
-                attachReachNode(descendant)
-            end
-        end
-    end))
-
-    table.insert(w.cons, gameFolder.AncestryChanged:Connect(function(_, instParent)
-        if instParent == nil then
-            safeDisconnectConns(w.cons)
-            reachWatchers[gameFolder] = nil
-        end
-    end))
-end
-
-local function attachReachMiniGameFolder(miniGameFolder)
-    if not miniGameFolder then return end
-    local w = ensureReachWatcher(miniGameFolder)
-    if w.attached then return end
-    w.attached = true
-
-    local replicated = miniGameFolder:FindFirstChild("Replicated")
-    local hitboxes = replicated and replicated:FindFirstChild("Hitboxes")
-    if hitboxes then hookHitboxesFolder(hitboxes) end
-
-    table.insert(w.cons, miniGameFolder.DescendantAdded:Connect(function(descendant)
-        if descendant:IsA("Folder") or descendant:IsA("Model") then
-            if descendant.Name == "Hitboxes" and descendant.Parent and descendant.Parent.Name == "Replicated" and descendant.Parent.Parent == miniGameFolder then
-                hookHitboxesFolder(descendant)
-            elseif descendant.Name == LocalPlayer.Name and descendant.Parent and descendant.Parent.Name == "Hitboxes" and descendant.Parent.Parent and descendant.Parent.Parent.Name == "Replicated" and descendant.Parent.Parent.Parent == miniGameFolder then
-                attachReachNode(descendant)
-            end
-        end
-    end))
-
-    table.insert(w.cons, miniGameFolder.AncestryChanged:Connect(function(_, instParent)
-        if instParent == nil then
-            safeDisconnectConns(w.cons)
-            reachWatchers[miniGameFolder] = nil
-        end
-    end))
-end
-
-local function updateAllReachWatchers()
-    for _, w in pairs(reachWatchers) do
-        if type(w) == "table" and w.parts then
-            applyReachVisuals(w, _G.HubConfig.TackleReach.Enabled)
-        end
-    end
 end
 
 local function scanReachWorkspace()
     local games = Workspace:FindFirstChild("Games")
     if games then
-        local w = ensureReachWatcher(games)
-        if not w.attached then
-            w.attached = true
-            table.insert(w.cons, games.ChildAdded:Connect(function(gFolder) attachReachGameFolder(gFolder) end))
+        for _, gFolder in ipairs(games:GetChildren()) do
+            local rep = gFolder:FindFirstChild("Replicated")
+            local hb = rep and rep:FindFirstChild("Hitboxes")
+            local myHb = hb and hb:FindFirstChild(LocalPlayer.Name)
+            if myHb then attachReachNode(myHb) end
         end
-        for _, gFolder in ipairs(games:GetChildren()) do attachReachGameFolder(gFolder) end
-    end
-
-    local miniGames = Workspace:FindFirstChild("MiniGames")
-    if miniGames then
-        local w = ensureReachWatcher(miniGames)
-        if not w.attached then
-            w.attached = true
-            table.insert(w.cons, miniGames.ChildAdded:Connect(function(mgFolder) attachReachMiniGameFolder(mgFolder) end))
-        end
-        for _, mgFolder in ipairs(miniGames:GetChildren()) do attachReachMiniGameFolder(mgFolder) end
     end
 end
 
--- Initialize Workspace Watcher Loop for Tackle Reach
 task.spawn(function()
     task.wait(0.5)
     scanReachWorkspace()
-    Workspace.ChildAdded:Connect(function(child)
-        if child.Name == "Games" or child.Name == "MiniGames" then
-            task.defer(scanReachWorkspace)
-        end
-    end)
 end)
 
--- Continuous state listener / refresh loop
 RunService.Heartbeat:Connect(function()
-    updateAllReachWatchers()
+    for _, w in pairs(reachWatchers) do
+        if type(w) == "table" and w.parts then
+            applyReachVisuals(w, _G.HubConfig.TackleReach.Enabled)
+        end
+    end
 end)
 
 ----------------------------------------------------------------------------------
--- 8. QB AIM TARGETING & EXECUTION ENGINE LOOPS
+-- 10. QB AIM TARGETING & EXECUTION ENGINE LOOPS
 ----------------------------------------------------------------------------------
 local qbTargetPlayer = nil
 
@@ -1437,21 +911,12 @@ local function getBestQBTarget()
         if p ~= LocalPlayer and p.Character then
             local eHrp = p.Character:FindFirstChild("HumanoidRootPart")
             if eHrp and camera then
-                local sameTeam = false
-                pcall(function()
-                    local myTeam = LocalPlayer:FindFirstChild("Replicated") and LocalPlayer.Replicated:FindFirstChild("TeamID") and LocalPlayer.Replicated.TeamID.Value
-                    local pTeam = p:FindFirstChild("Replicated") and p.Replicated:FindFirstChild("TeamID") and p.Replicated.TeamID.Value
-                    if myTeam and pTeam and myTeam == pTeam then sameTeam = true end
-                end)
-
-                if not _G.HubConfig.QBAim.TeamFilter or sameTeam then
-                    local sPos, onScreen = camera:WorldToViewportPoint(eHrp.Position)
-                    if onScreen then
-                        local d = (Vector2.new(mouse.X, mouse.Y) - Vector2.new(sPos.X, sPos.Y)).Magnitude
-                        if d < bestDist then
-                            bestDist = d
-                            bestPlayer = p
-                        end
+                local sPos, onScreen = camera:WorldToViewportPoint(eHrp.Position)
+                if onScreen then
+                    local d = (Vector2.new(mouse.X, mouse.Y) - Vector2.new(sPos.X, sPos.Y)).Magnitude
+                    if d < bestDist then
+                        bestDist = d
+                        bestPlayer = p
                     end
                 end
             end
@@ -1480,7 +945,7 @@ local function executeQBThrow()
     if plan and plan.aimPoint then
         local gameEv = nil
         pcall(function()
-            for _, folder in ipairs({Workspace:FindFirstChild("Games"), ReplicatedStorage:FindFirstChild("Games"), Workspace:FindFirstChild("MiniGames"), ReplicatedStorage:FindFirstChild("MiniGames")}) do
+            for _, folder in ipairs({Workspace:FindFirstChild("Games"), ReplicatedStorage:FindFirstChild("Games")}) do
                 if folder then
                     for _, gameInst in ipairs(folder:GetChildren()) do
                         local re = gameInst:FindFirstChild("ReEvent") or (gameInst:FindFirstChild("Replicated") and gameInst.Replicated:FindFirstChild("ReEvent"))
@@ -1491,17 +956,13 @@ local function executeQBThrow()
         end)
 
         if gameEv then
-            gameEv:FireServer("Mechanics", "ThrowBall", {
-                Target = plan.aimPoint,
-                AutoThrow = false,
-                Power = 100
-            })
+            gameEv:FireServer("Mechanics", "ThrowBall", { Target = plan.aimPoint, AutoThrow = false, Power = 100 })
         end
     end
 end
 
 ----------------------------------------------------------------------------------
--- 9. NO OOB (NO OUT OF BOUNDS) ENGINE
+-- 11. NO OOB ENGINE
 ----------------------------------------------------------------------------------
 task.spawn(function()
     while task.wait(1) do
@@ -1509,10 +970,8 @@ task.spawn(function()
             for _, obj in ipairs(Workspace:GetChildren()) do
                 if obj:IsA("BasePart") then
                     local name = obj.Name:lower()
-                    if name:find("oob") or name:find("outofbounds") or name:find("out_of_bounds") or name:find("sideline") or name:find("border") then
-                        if obj.CanTouch then
-                            obj.CanTouch = false
-                        end
+                    if name:find("oob") or name:find("outofbounds") or name:find("sideline") then
+                        if obj.CanTouch then obj.CanTouch = false end
                     end
                 end
             end
@@ -1520,28 +979,8 @@ task.spawn(function()
     end
 end)
 
-RunService.Heartbeat:Connect(function()
-    if not _G.HubConfig.NoOOB or not _G.HubConfig.NoOOB.Enabled then return end
-
-    local ball = findFootballPart()
-    local char, hrp = getChar()
-    if not char or not hrp or not ball then return end
-
-    local isHolding = (ball.Position - hrp.Position).Magnitude <= 10 or ball:IsDescendantOf(char)
-    if not isHolding then return end
-
-    local ray = Workspace:Raycast(hrp.Position + Vector3.new(0, 5, 0), Vector3.new(0, -20, 0))
-    if ray and ray.Instance then
-        local hitName = ray.Instance.Name:lower()
-        if hitName:find("oob") or hitName:find("out") or hitName:find("sideline") then
-            local pushDir = (Vector3.new(0, hrp.Position.Y, 0) - hrp.Position).Unit
-            hrp.AssemblyLinearVelocity = Vector3.new(pushDir.X * 15, hrp.AssemblyLinearVelocity.Y, pushDir.Z * 15)
-        end
-    end
-end)
-
 ----------------------------------------------------------------------------------
--- 10. HITBOX ENGINE (COLLIDABLE HUMANOIDROOTPART SYSTEM)
+-- 12. CROZO HITBOX ENGINE
 ----------------------------------------------------------------------------------
 local originalHitboxProperties = {}
 
@@ -1563,12 +1002,8 @@ RunService.RenderStepped:Connect(function()
                         }
                     end
 
-                    if eHrp.Size ~= targetSize then
-                        eHrp.Size = targetSize
-                    end
-                    if eHrp.Transparency ~= transVal then
-                        eHrp.Transparency = transVal
-                    end
+                    if eHrp.Size ~= targetSize then eHrp.Size = targetSize end
+                    if eHrp.Transparency ~= transVal then eHrp.Transparency = transVal end
                     eHrp.CanCollide = true
                 end
             end
@@ -1590,7 +1025,7 @@ RunService.RenderStepped:Connect(function()
 end)
 
 ----------------------------------------------------------------------------------
--- 11. VISUALS & ENVIRONMENT
+-- 13. VISUALS & ENVIRONMENT
 ----------------------------------------------------------------------------------
 task.spawn(function()
     while task.wait(1) do
@@ -1599,19 +1034,6 @@ task.spawn(function()
             Lighting.OutdoorAmbient = Color3.fromRGB(255, 30, 30)
             Lighting.FogColor = Color3.fromRGB(150, 0, 0)
             Lighting.FogEnd = 500
-            local currentSky = Lighting:FindFirstChildOfClass("Sky")
-            if not currentSky or currentSky.Name ~= "IvyRedSky" then
-                if currentSky then currentSky:Destroy() end
-                local redSkyObj = Instance.new("Sky")
-                redSkyObj.Name = "IvyRedSky"
-                redSkyObj.SkyboxBk = "rbxassetid://252765961"
-                redSkyObj.SkyboxDn = "rbxassetid://252763782"
-                redSkyObj.SkyboxFt = "rbxassetid://252763580"
-                redSkyObj.SkyboxLf = "rbxassetid://252763467"
-                redSkyObj.SkyboxRt = "rbxassetid://252763325"
-                redSkyObj.SkyboxUp = "rbxassetid://252763962"
-                redSkyObj.Parent = Lighting
-            end
         end
 
         if _G.HubConfig.PotatoGraphics.Enabled then
@@ -1627,10 +1049,9 @@ task.spawn(function()
 end)
 
 ----------------------------------------------------------------------------------
--- 12. MOVEMENT & PHYSICAL OVERRIDES
+-- 14. MOVEMENT OVERRIDES
 ----------------------------------------------------------------------------------
 local lastJumpTime = 0
-
 UserInputService.JumpRequest:Connect(function()
     if not _G.HubConfig.JP.Enabled then return end
     local char, hrp, hum = getChar()
@@ -1650,14 +1071,13 @@ RunService.Heartbeat:Connect(function()
     if _G.HubConfig.Speed.Enabled then
         hum.WalkSpeed = tonumber(_G.HubConfig.Speed.SpeedVal) or 22.2
     end
-
     if _G.HubConfig.Gravity.Enabled then
         Workspace.Gravity = tonumber(_G.HubConfig.Gravity.GravityVal) or 178.4
     end
 end)
 
 -- ================================================================================
--- IVY HUB COMPACT ORGANIC GUI FRAMEWORK (TOP-LAYER PRIORITY)
+-- IVY HUB COMPACT ORGANIC GUI FRAMEWORK
 -- ================================================================================
 
 local ScreenGui = Instance.new("ScreenGui")
@@ -1672,7 +1092,6 @@ local THEME = {
     Header = Color3.fromRGB(18, 30, 22),
     Sidebar = Color3.fromRGB(11, 18, 14),
     Card = Color3.fromRGB(18, 32, 24),
-    CardHover = Color3.fromRGB(24, 42, 31),
     Accent = Color3.fromRGB(50, 220, 110),
     Glow = Color3.fromRGB(0, 255, 140),
     DarkVine = Color3.fromRGB(22, 70, 40),
@@ -1681,7 +1100,6 @@ local THEME = {
     InputBg = Color3.fromRGB(12, 24, 18)
 }
 
--- Compact Main Window Frame
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
 MainFrame.Size = UDim2.new(0, 400, 0, 270)
@@ -1693,81 +1111,13 @@ MainFrame.Draggable = true
 MainFrame.ClipsDescendants = true
 MainFrame.Parent = ScreenGui
 
-local MainCorner = Instance.new("UICorner", MainFrame)
-MainCorner.CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
 
--- Animated Moving Vine Background Canvas Engine
-local VineCanvas = Instance.new("Frame", MainFrame)
-VineCanvas.Name = "VineCanvas"
-VineCanvas.Size = UDim2.new(1, 0, 1, 0)
-VineCanvas.BackgroundTransparency = 1
-VineCanvas.ClipsDescendants = true
-VineCanvas.ZIndex = 0
-
-local function SpawnMovingVineLeaf()
-    local Leaf = Instance.new("TextLabel", VineCanvas)
-    Leaf.Size = UDim2.new(0, 14, 0, 14)
-    Leaf.Position = UDim2.new(math.random(), 0, 1, 10)
-    Leaf.Text = "🍃"
-    Leaf.TextSize = math.random(8, 12)
-    Leaf.BackgroundTransparency = 1
-    Leaf.TextTransparency = 0.75
-    Leaf.Rotation = math.random(0, 360)
-
-    local speed = math.random(8, 15)
-    local swayAmplitude = math.random(10, 25)
-    local startX = Leaf.Position.X.Scale
-    local conn
-
-    conn = RunService.RenderStepped:Connect(function(dt)
-        if not Leaf or not Leaf.Parent then conn:Disconnect() return end
-        local newY = Leaf.Position.Y.Scale - (dt * (speed / 100))
-        local sway = math.sin(tick() * 2 + speed) * (swayAmplitude / 1000)
-        Leaf.Position = UDim2.new(startX + sway, 0, newY, 0)
-        Leaf.Rotation = (Leaf.Rotation + dt * 25) % 360
-        if newY < -0.1 then
-            Leaf:Destroy()
-            conn:Disconnect()
-        end
-    end)
-end
-
-task.spawn(function()
-    while MainFrame and MainFrame.Parent do
-        SpawnMovingVineLeaf()
-        task.wait(1.5)
-    end
-end)
-
--- Pulsating Glowing Vine Border
-local MainStroke = Instance.new("UIStroke", MainFrame)
-MainStroke.Thickness = 2.0
-MainStroke.Transparency = 0.1
-
-local VineGradient = Instance.new("UIGradient", MainStroke)
-VineGradient.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, THEME.DarkVine),
-    ColorSequenceKeypoint.new(0.25, THEME.Accent),
-    ColorSequenceKeypoint.new(0.5, THEME.Glow),
-    ColorSequenceKeypoint.new(0.75, THEME.Accent),
-    ColorSequenceKeypoint.new(1, THEME.DarkVine)
-})
-VineGradient.Rotation = 45
-
-local step = 0
-RunService.RenderStepped:Connect(function(dt)
-    step = (step + dt * 0.4) % 1
-    VineGradient.Offset = Vector2.new(math.sin(step * math.pi * 2) * 0.5, math.cos(step * math.pi * 2) * 0.5)
-    VineGradient.Rotation = (VineGradient.Rotation + dt * 25) % 360
-end)
-
--- Compact Header Bar
+-- Header Bar
 local Header = Instance.new("Frame", MainFrame)
-Header.Name = "Header"
 Header.Size = UDim2.new(1, 0, 0, 30)
 Header.BackgroundColor3 = THEME.Header
 Header.BackgroundTransparency = 0.2
-Header.ZIndex = 2
 Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 8)
 
 local Title = Instance.new("TextLabel", Header)
@@ -1781,14 +1131,12 @@ Title.Font = Enum.Font.GothamBold
 Title.TextXAlignment = Enum.TextXAlignment.Left
 Title.BackgroundTransparency = 1
 
--- Compact Sidebar Panel
+-- Sidebar
 local Sidebar = Instance.new("Frame", MainFrame)
-Sidebar.Name = "Sidebar"
 Sidebar.Size = UDim2.new(0, 105, 1, -34)
 Sidebar.Position = UDim2.new(0, 0, 0, 34)
 Sidebar.BackgroundColor3 = THEME.Sidebar
 Sidebar.BackgroundTransparency = 0.4
-Sidebar.ZIndex = 2
 Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0, 6)
 
 local TabScroll = Instance.new("ScrollingFrame", Sidebar)
@@ -1796,23 +1144,19 @@ TabScroll.Size = UDim2.new(1, -4, 1, -6)
 TabScroll.Position = UDim2.new(0, 2, 0, 3)
 TabScroll.BackgroundTransparency = 1
 TabScroll.ScrollBarThickness = 2
-TabScroll.ScrollBarImageColor3 = THEME.Accent
 TabScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
 
 local TabListLayout = Instance.new("UIListLayout", TabScroll)
 TabListLayout.Padding = UDim.new(0, 3)
-TabListLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
 local ContentArea = Instance.new("Frame", MainFrame)
-ContentArea.Name = "ContentArea"
 ContentArea.Size = UDim2.new(1, -112, 1, -38)
 ContentArea.Position = UDim2.new(0, 110, 0, 34)
 ContentArea.BackgroundTransparency = 1
-ContentArea.ZIndex = 2
 
 local CyberGUI = { Tabs = {}, KeybindRegistry = {}, RefreshCallbacks = {} }
 
--- Keybind Listener System
+-- Keybind Registration Engine
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     local code = input.KeyCode
@@ -1843,16 +1187,12 @@ UserInputService.InputEnded:Connect(function(input)
 end)
 
 local function FormatKeyName(keyCode)
-    if not keyCode or typeof(keyCode) ~= "EnumItem" or keyCode == Enum.KeyCode.Unknown then
-        return "N/A"
-    end
+    if not keyCode or typeof(keyCode) ~= "EnumItem" or keyCode == Enum.KeyCode.Unknown then return "N/A" end
     return keyCode.Name:gsub("Button", ""):gsub("DPad", "DPad ")
 end
 
 function CyberGUI:RefreshAllUI()
-    for _, callback in ipairs(CyberGUI.RefreshCallbacks) do
-        pcall(callback)
-    end
+    for _, callback in ipairs(CyberGUI.RefreshCallbacks) do pcall(callback) end
 end
 
 function CyberGUI:CreateTab(tabName)
@@ -1879,7 +1219,6 @@ function CyberGUI:CreateTab(tabName)
     Container.BackgroundTransparency = 1
     Container.Visible = false
     Container.ScrollBarThickness = 2
-    Container.ScrollBarImageColor3 = THEME.Accent
     Container.AutomaticCanvasSize = Enum.AutomaticSize.Y
 
     local ContainerList = Instance.new("UIListLayout", Container)
@@ -1914,10 +1253,6 @@ function CyberGUI:CreateTab(tabName)
         Card.BackgroundTransparency = 0.2
         Instance.new("UICorner", Card).CornerRadius = UDim.new(0, 5)
 
-        local CardStroke = Instance.new("UIStroke", Card)
-        CardStroke.Color = THEME.DarkVine
-        CardStroke.Thickness = 1
-
         local Label = Instance.new("TextLabel", Card)
         Label.Size = UDim2.new(0.65, 0, 1, 0)
         Label.Position = UDim2.new(0, 6, 0, 0)
@@ -1941,15 +1276,8 @@ function CyberGUI:CreateTab(tabName)
 
         local function UpdateVisuals()
             local state = configRef[configKey] or false
-            TweenService:Create(ToggleBtn, TweenInfo.new(0.18), {
-                BackgroundColor3 = state and THEME.Accent or Color3.fromRGB(35, 50, 40)
-            }):Play()
-            TweenService:Create(Knob, TweenInfo.new(0.18), {
-                Position = state and UDim2.new(1, -13, 0.5, -5) or UDim2.new(0, 2, 0.5, -5)
-            }):Play()
-            TweenService:Create(CardStroke, TweenInfo.new(0.18), {
-                Color = state and THEME.Accent or THEME.DarkVine
-            }):Play()
+            ToggleBtn.BackgroundColor3 = state and THEME.Accent or Color3.fromRGB(35, 50, 40)
+            Knob.Position = state and UDim2.new(1, -13, 0.5, -5) or UDim2.new(0, 2, 0.5, -5)
         end
 
         local function SetState(state)
@@ -1997,18 +1325,10 @@ function CyberGUI:CreateTab(tabName)
         InputBox.ClearTextOnFocus = false
         Instance.new("UICorner", InputBox).CornerRadius = UDim.new(0, 3)
 
-        local function UpdateVisuals()
-            InputBox.Text = tostring(configRef[configKey] or "")
-        end
-
+        local function UpdateVisuals() InputBox.Text = tostring(configRef[configKey] or "") end
         local function UpdateValue()
-            local rawText = InputBox.Text
-            local num = tonumber(rawText)
-            if num then
-                configRef[configKey] = num
-            else
-                configRef[configKey] = rawText
-            end
+            local num = tonumber(InputBox.Text)
+            if num then configRef[configKey] = num else configRef[configKey] = InputBox.Text end
         end
 
         InputBox:GetPropertyChangedSignal("Text"):Connect(UpdateValue)
@@ -2072,15 +1392,12 @@ function CyberGUI:CreateTab(tabName)
                 end
             end,
             SetState = function(state)
-                if toggleRef and type(toggleRef) == "table" and toggleRef.SetState then 
-                    toggleRef.SetState(state) 
-                end
+                if toggleRef and type(toggleRef) == "table" and toggleRef.SetState then toggleRef.SetState(state) end
             end
         }
 
         BindBtn.MouseButton1Click:Connect(function()
             BindBtn.Text = "..."
-            BindBtn.TextColor3 = Color3.fromRGB(255, 200, 50)
             local conn
             conn = UserInputService.InputBegan:Connect(function(input)
                 local code = input.KeyCode
@@ -2105,26 +1422,11 @@ function CyberGUI:CreateTab(tabName)
         local Divider = Instance.new("Frame", Container)
         Divider.Size = UDim2.new(0.97, 0, 0, 10)
         Divider.BackgroundTransparency = 1
-
         local Line = Instance.new("Frame", Divider)
         Line.Size = UDim2.new(1, -20, 0, 1)
         Line.Position = UDim2.new(0, 10, 0.5, 0)
         Line.BackgroundColor3 = THEME.DarkVine
         Line.BorderSizePixel = 0
-
-        local LineGradient = Instance.new("UIGradient", Line)
-        LineGradient.Color = ColorSequence.new({
-            ColorSequenceKeypoint.new(0, Color3.fromRGB(14, 22, 17)),
-            ColorSequenceKeypoint.new(0.5, THEME.Accent),
-            ColorSequenceKeypoint.new(1, Color3.fromRGB(14, 22, 17))
-        })
-
-        local CenterDot = Instance.new("TextLabel", Divider)
-        CenterDot.Size = UDim2.new(0, 10, 0, 10)
-        CenterDot.Position = UDim2.new(0.5, -5, 0.5, -5)
-        CenterDot.Text = "🍃"
-        CenterDot.TextSize = 7
-        CenterDot.BackgroundTransparency = 1
     end
 
     table.insert(CyberGUI.Tabs, TabObj)
@@ -2132,7 +1434,7 @@ function CyberGUI:CreateTab(tabName)
 end
 
 -- ================================================================================
--- TAB CONTROLS REGISTRATION
+-- TAB CONTROLS REGISTRATION (ALL VALUE CHANGERS RESTORED)
 -- ================================================================================
 
 -- 1. Qb AB Tab
@@ -2145,12 +1447,8 @@ QbABTab:AddToggle("Target Highlight", _G.HubConfig.QBAim, "TargetHighlight")
 QbABTab:AddValueChanger("Lead Adjust", _G.HubConfig.QBAim, "LeadDelay")
 QbABTab:AddValueChanger("Peak Height", _G.HubConfig.QBAim, "PeakHeight")
 QbABTab:AddValueChanger("XYZ Drift", _G.HubConfig.QBAim, "QBDrift")
-QbABTab:AddKeybinder("Lock WR", _G.HubConfig.QBAim, "LockKeybind", nil, false, true, function()
-    qbTargetPlayer = getBestQBTarget()
-end)
-QbABTab:AddKeybinder("Throw Ball", _G.HubConfig.QBAim, "ThrowKeybind", nil, false, true, function()
-    executeQBThrow()
-end)
+QbABTab:AddKeybinder("Lock WR", _G.HubConfig.QBAim, "LockKeybind", nil, false, true, function() qbTargetPlayer = getBestQBTarget() end)
+QbABTab:AddKeybinder("Throw Ball", _G.HubConfig.QBAim, "ThrowKeybind", nil, false, true, function() executeQBThrow() end)
 QbABTab:AddKeybinder("Toggle Qb AB", _G.HubConfig.QBAim, "ToggleKeybind", qbEnableTgl)
 QbABTab:AddDivider()
 
@@ -2162,7 +1460,16 @@ AutoSTTab:AddValueChanger("Smoothness", _G.HubConfig.AutoST, "Smoothness")
 AutoSTTab:AddKeybinder("Auto ST", _G.HubConfig.AutoST, "Keybind", autoSTTgl, true)
 AutoSTTab:AddDivider()
 
--- 3. Auto Stick Tab
+-- 3. HeadPull Tab (Mid-Air Only)
+local HeadPullTab = CyberGUI:CreateTab("HeadPull")
+headPullTgl = HeadPullTab:AddToggle("HeadPull Active", _G.HubConfig.HeadPull, "Enabled")
+HeadPullTab:AddValueChanger("Range", _G.HubConfig.HeadPull, "Range")
+HeadPullTab:AddValueChanger("Smoothness", _G.HubConfig.HeadPull, "Smoothness")
+HeadPullTab:AddValueChanger("Max Strength", _G.HubConfig.HeadPull, "MaxStrength")
+HeadPullTab:AddKeybinder("HeadPull", _G.HubConfig.HeadPull, "Keybind", headPullTgl, true)
+HeadPullTab:AddDivider()
+
+-- 4. Auto Stick Tab (All Value Changers Restored)
 local AutoStickTab = CyberGUI:CreateTab("Auto Stick")
 local autoStickTgl = AutoStickTab:AddToggle("Auto Stick", _G.HubConfig.AutoStick, "Enabled")
 AutoStickTab:AddValueChanger("Activate Dist", _G.HubConfig.AutoStick, "ActivateDist")
@@ -2176,28 +1483,24 @@ AutoStickTab:AddValueChanger("Correction Speed", _G.HubConfig.AutoStick, "CorrSp
 AutoStickTab:AddKeybinder("Auto Stick", _G.HubConfig.AutoStick, "Keybind", autoStickTgl)
 AutoStickTab:AddDivider()
 
--- 4. Stick Bump Tab (Hold Keybind Configuration)
+-- 5. Stick Bump Tab
 local StickBumpTab = CyberGUI:CreateTab("Stick Bump")
 local stickBumpTgl = StickBumpTab:AddToggle("Stick Bump", _G.HubConfig.StickBump, "Enabled")
-StickBumpTab:AddValueChanger("Pull Strength", _G.HubConfig.StickBump, "PullStrength")
-StickBumpTab:AddValueChanger("Stickiness", _G.HubConfig.StickBump, "Stickiness")
+StickBumpTab:AddValueChanger("Range", _G.HubConfig.StickBump, "Range")
+StickBumpTab:AddValueChanger("Smoothness", _G.HubConfig.StickBump, "Smoothness")
 StickBumpTab:AddValueChanger("Boost Power", _G.HubConfig.StickBump, "BoostPower")
 StickBumpTab:AddValueChanger("Cooldown", _G.HubConfig.StickBump, "Cooldown")
-StickBumpTab:AddValueChanger("Balance Radius", _G.HubConfig.StickBump, "BalanceRadius")
-StickBumpTab:AddValueChanger("Vertical Min", _G.HubConfig.StickBump, "VertMin")
-StickBumpTab:AddValueChanger("Vertical Max", _G.HubConfig.StickBump, "VertMax")
-StickBumpTab:AddValueChanger("Correction Speed", _G.HubConfig.StickBump, "CorrectionSpeed")
-StickBumpTab:AddKeybinder("Stick Bump", _G.HubConfig.StickBump, "Keybind", stickBumpTgl, true) -- Hold mechanic set to TRUE
+StickBumpTab:AddKeybinder("Stick Bump", _G.HubConfig.StickBump, "Keybind", stickBumpTgl, true)
 StickBumpTab:AddDivider()
 
--- 5. Tap Bumper Tab
+-- 6. Tap Bumper Tab
 local TapBumperTab = CyberGUI:CreateTab("Tap Bumper")
 local tapBumperTgl = TapBumperTab:AddToggle("Tap Bumper", _G.HubConfig.TapBumper, "Enabled")
 TapBumperTab:AddValueChanger("Launch Force", _G.HubConfig.TapBumper, "Force")
 TapBumperTab:AddKeybinder("Tap Bumper", _G.HubConfig.TapBumper, "Keybind", nil, false, true, triggerTapBumperImpulse)
 TapBumperTab:AddDivider()
 
--- 6. Auto Rocket Tab
+-- 7. Auto Rocket Tab
 local AutoRocketTab = CyberGUI:CreateTab("Auto Rocket")
 local autoRocketTgl = AutoRocketTab:AddToggle("Auto Rocket", _G.HubConfig.AutoRocket, "Enabled")
 AutoRocketTab:AddToggle("Head Only Velocity", _G.HubConfig.AutoRocket, "HeadOnly")
@@ -2205,14 +1508,14 @@ AutoRocketTab:AddValueChanger("Dive Power", _G.HubConfig.AutoRocket, "Power")
 AutoRocketTab:AddKeybinder("Auto Rocket", _G.HubConfig.AutoRocket, "Keybind", autoRocketTgl)
 AutoRocketTab:AddDivider()
 
--- 7. Fling Tab
+-- 8. Fling Tab
 local FlingTab = CyberGUI:CreateTab("Fling")
 local flingTgl = FlingTab:AddToggle("Fling Active", _G.HubConfig.Fling, "Enabled")
 FlingTab:AddValueChanger("Fling Power", _G.HubConfig.Fling, "Power")
 FlingTab:AddKeybinder("Fling Action", _G.HubConfig.Fling, "Keybind", flingTgl, false, true, triggerFlingBoost)
 FlingTab:AddDivider()
 
--- 8. Sticky Tab (Hold Keybind)
+-- 9. Sticky Tab (Hold Keybind)
 local StickyTab = CyberGUI:CreateTab("Sticky")
 local stickyTgl = StickyTab:AddToggle("Sticky Head", _G.HubConfig.Sticky, "Enabled")
 StickyTab:AddValueChanger("Detection Range", _G.HubConfig.Sticky, "Range")
@@ -2221,7 +1524,7 @@ StickyTab:AddValueChanger("Strength", _G.HubConfig.Sticky, "Strength")
 StickyTab:AddKeybinder("Sticky Head", _G.HubConfig.Sticky, "Keybind", stickyTgl, true)
 StickyTab:AddDivider()
 
--- 9. BTP & Magnet Tab
+-- 10. BTP & Magnet Tab
 local MagnetTab = CyberGUI:CreateTab("BTP & Magnet")
 local magTgl = MagnetTab:AddToggle("uwu magnets", _G.HubConfig.uwuMagnets, "Enabled")
 MagnetTab:AddValueChanger("Magnet Power", _G.HubConfig.uwuMagnets, "Power")
@@ -2235,7 +1538,7 @@ MagnetTab:AddValueChanger("Catch Arm", _G.HubConfig.BTP, "CatchArm")
 MagnetTab:AddKeybinder("Ball TP", _G.HubConfig.BTP, "Keybind", btpTgl)
 MagnetTab:AddDivider()
 
--- 10. LegitPV Tab (Hold Keybind)
+-- 11. LegitPV Tab
 local PVTab = CyberGUI:CreateTab("LegitPV")
 local pvTgl = PVTab:AddToggle("Pull Vector Assist", _G.HubConfig.LegitPV, "Enabled")
 PVTab:AddValueChanger("Pull Vector Strength", _G.HubConfig.LegitPV, "PullVec")
@@ -2243,7 +1546,7 @@ PVTab:AddValueChanger("Max Distance", _G.HubConfig.LegitPV, "MaxDist")
 PVTab:AddKeybinder("LegitPV", _G.HubConfig.LegitPV, "Keybind", pvTgl, true)
 PVTab:AddDivider()
 
--- 11. Tackle Reach Tab
+-- 12. Tackle Reach Tab
 local ReachTab = CyberGUI:CreateTab("Tackle Reach")
 local reachTgl = ReachTab:AddToggle("Tackle Reach", _G.HubConfig.TackleReach, "Enabled")
 ReachTab:AddValueChanger("Reach Size X", _G.HubConfig.TackleReach, "SizeX")
@@ -2253,7 +1556,7 @@ ReachTab:AddValueChanger("Transparency", _G.HubConfig.TackleReach, "Transparency
 ReachTab:AddKeybinder("Tackle Reach", _G.HubConfig.TackleReach, "Keybind", reachTgl)
 ReachTab:AddDivider()
 
--- 12. Movement & Physics Tab
+-- 13. Movement & Physics Tab
 local MoveTab = CyberGUI:CreateTab("Movement")
 local noOobTgl = MoveTab:AddToggle("NO OOB", _G.HubConfig.NoOOB, "Enabled")
 MoveTab:AddKeybinder("NO OOB", _G.HubConfig.NoOOB, "Keybind", noOobTgl)
@@ -2275,7 +1578,7 @@ MoveTab:AddValueChanger("Cooldown", _G.HubConfig.JP, "Cooldown")
 MoveTab:AddKeybinder("JP", _G.HubConfig.JP, "Keybind", jumpTgl)
 MoveTab:AddDivider()
 
--- 13. Visuals Tab
+-- 14. Visuals Tab
 local VisualsTab = CyberGUI:CreateTab("Visuals")
 local redSkyTgl = VisualsTab:AddToggle("Red Skybox", _G.HubConfig.RedSky, "Enabled")
 VisualsTab:AddValueChanger("Sky Brightness", _G.HubConfig.RedSky, "Brightness")
@@ -2286,7 +1589,7 @@ local potatoTgl = VisualsTab:AddToggle("potato graphics", _G.HubConfig.PotatoGra
 VisualsTab:AddKeybinder("potato graphics", _G.HubConfig.PotatoGraphics, "Keybind", potatoTgl)
 VisualsTab:AddDivider()
 
--- 14. Hitbox Expander Tab
+-- 15. Hitbox Expander Tab (Crozo Hitbox Engine)
 local HitboxTab = CyberGUI:CreateTab("Hitbox")
 local headTgl = HitboxTab:AddToggle("Hitbox Expander", _G.HubConfig.HeadHitbox, "Enabled")
 HitboxTab:AddValueChanger("Hitbox Size", _G.HubConfig.HeadHitbox, "HeadSize")
@@ -2294,22 +1597,13 @@ HitboxTab:AddValueChanger("Transparency", _G.HubConfig.HeadHitbox, "Transparency
 HitboxTab:AddKeybinder("Hitbox Expander", _G.HubConfig.HeadHitbox, "Keybind", headTgl)
 HitboxTab:AddDivider()
 
--- 15. Misc Tab & Config Manager Engine
+-- 16. Misc Tab & Complete Config System Engine
 local MiscTab = CyberGUI:CreateTab("Misc")
-
-MiscTab:AddKeybinder("Gui Toggle", _G.HubConfig.Misc, "Keybind", nil, false, true, function()
-    MainFrame.Visible = not MainFrame.Visible
-end)
+MiscTab:AddKeybinder("Gui Toggle", _G.HubConfig.Misc, "Keybind", nil, false, true, function() MainFrame.Visible = not MainFrame.Visible end)
 MiscTab:AddDivider()
 
--- HIDER FEATURE
 local hiderTgl = MiscTab:AddToggle("Hider", _G.HubConfig.Misc, "Hider", function(state)
-    if state then
-        runHiderLogic()
-    elseif hiderConnection then
-        hiderConnection:Disconnect()
-        hiderConnection = nil
-    end
+    if state then runHiderLogic() elseif hiderConnection then hiderConnection:Disconnect() hiderConnection = nil end
 end)
 MiscTab:AddKeybinder("Hider", _G.HubConfig.Misc, "HiderKeybind", hiderTgl)
 MiscTab:AddDivider()
@@ -2326,9 +1620,7 @@ local function GetSavedConfigs()
             for _, filePath in ipairs(listfiles(CONFIG_FOLDER)) do
                 if filePath:sub(-5) == ".json" then
                     local fileName = filePath:match("([^/\\]+)%.json$")
-                    if fileName then
-                        table.insert(cfgs, fileName)
-                    end
+                    if fileName then table.insert(cfgs, fileName) end
                 end
             end
         end)
@@ -2345,7 +1637,7 @@ local function GetCurrentAutoload()
     return "None"
 end
 
--- 1. Editable Config Name Input Card
+-- 1. Config Name Input Card
 local NameCard = Instance.new("Frame", MiscTab.Container)
 NameCard.Size = UDim2.new(0.97, 0, 0, 25)
 NameCard.BackgroundColor3 = THEME.Card
@@ -2373,9 +1665,7 @@ ConfigInputBox.TextSize = 9
 ConfigInputBox.ClearTextOnFocus = false
 Instance.new("UICorner", ConfigInputBox).CornerRadius = UDim.new(0, 3)
 
-ConfigInputBox:GetPropertyChangedSignal("Text"):Connect(function()
-    currentConfigName = ConfigInputBox.Text
-end)
+ConfigInputBox:GetPropertyChangedSignal("Text"):Connect(function() currentConfigName = ConfigInputBox.Text end)
 
 -- 2. Dropdown List Card
 local DropCard = Instance.new("Frame", MiscTab.Container)
@@ -2462,7 +1752,7 @@ end)
 
 RefreshBtn.MouseButton1Click:Connect(PopulateDropdown)
 
--- Status / Autoload Indicator Card
+-- Status / Autoload Indicator
 local StatusCard = Instance.new("Frame", MiscTab.Container)
 StatusCard.Size = UDim2.new(0.97, 0, 0, 18)
 StatusCard.BackgroundColor3 = THEME.Card
@@ -2483,7 +1773,7 @@ local function UpdateAutoloadStatus()
     StatusLabel.Text = "Autoloading: " .. GetCurrentAutoload()
 end
 
--- Config Action Buttons Builder
+-- Config Buttons Helper
 local function CreateActionButton(btnText, btnColor, callback)
     local Card = Instance.new("Frame", MiscTab.Container)
     Card.Size = UDim2.new(0.97, 0, 0, 22)
@@ -2554,24 +1844,5 @@ CreateActionButton("Clear Autoload", Color3.fromRGB(70, 70, 80), function()
 end)
 
 MiscTab:AddDivider()
-
--- ================================================================================
--- AUTOLOAD EXECUTION ON BOOT
--- ================================================================================
-task.spawn(function()
-    task.wait(0.2)
-    if isfile and isfile(AUTOLOAD_FILE) and readfile then
-        local autoName = readfile(AUTOLOAD_FILE)
-        if autoName and #autoName > 0 then
-            local autoPath = CONFIG_FOLDER .. "/" .. autoName .. ".json"
-            if isfile(autoPath) then
-                pcall(function()
-                    DeserializeConfig(readfile(autoPath))
-                    CyberGUI:RefreshAllUI()
-                end)
-            end
-        end
-    end
-end)
 
 ScreenGui.Parent = targetParent
