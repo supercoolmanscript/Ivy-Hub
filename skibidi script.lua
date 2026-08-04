@@ -1541,7 +1541,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 ----------------------------------------------------------------------------------
--- 10. CROZO HITBOX ENGINE (HEAD SIZE ADJUSTER)
+-- 10. HITBOX ENGINE (COLLIDABLE HUMANOIDROOTPART SYSTEM)
 ----------------------------------------------------------------------------------
 local originalHitboxProperties = {}
 
@@ -1553,31 +1553,34 @@ RunService.RenderStepped:Connect(function()
 
         for _, p in ipairs(Players:GetPlayers()) do
             if p ~= LocalPlayer and p.Character then
-                local eHead = p.Character:FindFirstChild("Head")
-                if eHead then
-                    if not originalHitboxProperties[eHead] then
-                        originalHitboxProperties[eHead] = {
-                            Size = eHead.Size,
-                            Transparency = eHead.Transparency
+                local eHrp = p.Character:FindFirstChild("HumanoidRootPart")
+                if eHrp then
+                    if not originalHitboxProperties[eHrp] then
+                        originalHitboxProperties[eHrp] = {
+                            Size = eHrp.Size,
+                            Transparency = eHrp.Transparency,
+                            CanCollide = eHrp.CanCollide
                         }
                     end
 
-                    if eHead.Size ~= targetSize then
-                        eHead.Size = targetSize
+                    if eHrp.Size ~= targetSize then
+                        eHrp.Size = targetSize
                     end
-                    if eHead.Transparency ~= transVal then
-                        eHead.Transparency = transVal
+                    if eHrp.Transparency ~= transVal then
+                        eHrp.Transparency = transVal
                     end
+                    eHrp.CanCollide = true
                 end
             end
         end
     else
         if next(originalHitboxProperties) then
-            for head, props in pairs(originalHitboxProperties) do
-                if head and head.Parent then
+            for hrp, props in pairs(originalHitboxProperties) do
+                if hrp and hrp.Parent then
                     pcall(function()
-                        head.Size = props.Size
-                        head.Transparency = props.Transparency
+                        hrp.Size = props.Size
+                        hrp.Transparency = props.Transparency
+                        hrp.CanCollide = props.CanCollide
                     end)
                 end
             end
@@ -1705,7 +1708,7 @@ local function SpawnMovingVineLeaf()
     local Leaf = Instance.new("TextLabel", VineCanvas)
     Leaf.Size = UDim2.new(0, 14, 0, 14)
     Leaf.Position = UDim2.new(math.random(), 0, 1, 10)
-    Leaf.Text = "🌿"
+    Leaf.Text = "🍃"
     Leaf.TextSize = math.random(8, 12)
     Leaf.BackgroundTransparency = 1
     Leaf.TextTransparency = 0.75
@@ -1770,7 +1773,7 @@ Instance.new("UICorner", Header).CornerRadius = UDim.new(0, 8)
 local Title = Instance.new("TextLabel", Header)
 Title.Size = UDim2.new(0, 200, 1, 0)
 Title.Position = UDim2.new(0, 10, 0, 0)
-Title.Text = "🌿 IVY <font color=\"rgb(50, 220, 110)\">HUB</font> <font size=\"8\" color=\"rgb(140, 180, 155)\">V2</font>"
+Title.Text = "🍃 IVY <font color=\"rgb(50, 220, 110)\">HUB</font> <font size=\"8\" color=\"rgb(140, 180, 155)\">V2</font>"
 Title.RichText = true
 Title.TextColor3 = THEME.Text
 Title.TextSize = 12
@@ -2119,7 +2122,7 @@ function CyberGUI:CreateTab(tabName)
         local CenterDot = Instance.new("TextLabel", Divider)
         CenterDot.Size = UDim2.new(0, 10, 0, 10)
         CenterDot.Position = UDim2.new(0.5, -5, 0.5, -5)
-        CenterDot.Text = "🌿"
+        CenterDot.Text = "🍃"
         CenterDot.TextSize = 7
         CenterDot.BackgroundTransparency = 1
     end
@@ -2396,7 +2399,7 @@ local DropBtn = Instance.new("TextButton", DropCard)
 DropBtn.Size = UDim2.new(0, 85, 0, 15)
 DropBtn.Position = UDim2.new(1, -126, 0.5, -7)
 DropBtn.BackgroundColor3 = THEME.InputBg
-DropBtn.Text = "Choose... 🔻"
+DropBtn.Text = "Choose... 📂"
 DropBtn.TextColor3 = THEME.Accent
 DropBtn.Font = Enum.Font.GothamBold
 DropBtn.TextSize = 9
