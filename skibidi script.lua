@@ -1,10 +1,3 @@
--- ================================================================================
--- IVY HUB V2 - FULL EDITION (COMPLETE UI VALUE CHANGERS & ALL MODULES RESTORED)
--- Features: QB Aim, Auto ST, Auto Stick, Stick Bump, HeadPull (Mid-Air Only),
---           NO OOB, Hider, uwu Magnets, Ball TP, Sticky Head, LegitPV, Advanced Tackle Reach,
---           Crozo Hitbox Expander, Loop Speed, Gravity, JP, Tap Bumper, Auto Rocket, Fling, etc.
--- ================================================================================
-
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
