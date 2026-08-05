@@ -55,7 +55,7 @@ _G.HubConfig = _G.HubConfig or {
     uwuMagnets = { Enabled = false, Power = 55, Range = 25, Keybind = Enum.KeyCode.F },
     BTP = { Enabled = false, MaxDist = 35, CatchArm = "RightHand", Keybind = Enum.KeyCode.E },
     Sticky = { Enabled = false, Range = 10, Smoothness = 12, Strength = 12, Keybind = Enum.KeyCode.Unknown },
-    LegitPV = { Enabled = false, PullVec = 0.01, MaxDist = 25, Keybind = Enum.KeyCode.Unknown },
+    JPV = { Enabled = false, Value = 1, MaxDist = 10, Keybind = Enum.KeyCode.Unknown },
     
     -- Standalone Auto ST Configuration
     AutoST = { Enabled = true, DetectionRange = 45, Smoothness = 25, Keybind = Enum.KeyCode.V },
@@ -135,17 +135,52 @@ local function getChar()
     return char, hrp, hum
 end
 
--- Football Detector Helper
+-- Target Football Detector (Filters out unanchored / field logo / map parts)
 local function findFootballPart()
-    for _, obj in ipairs(Workspace:GetDescendants()) do
+    local bestBall = nil
+    local shortestDist = math.huge
+    local char, hrp = getChar()
+
+    -- 1. Check direct Workspace children for unanchored thrown balls
+    for _, obj in ipairs(Workspace:GetChildren()) do
         if obj:IsA("BasePart") then
             local name = obj.Name:lower()
-            if name:find("ball") or name:find("football") or name:find("handle") then
-                return obj
+            if (name == "football" or name == "ball" or name:find("football")) and not obj.Anchored then
+                if hrp then
+                    local dist = (hrp.Position - obj.Position).Magnitude
+                    if dist < shortestDist then
+                        shortestDist = dist
+                        bestBall = obj
+                    end
+                else
+                    return obj
+                end
             end
         end
     end
-    return nil
+
+    -- 2. Fallback search excluding map, stadium, field, and logo parts
+    if not bestBall then
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj:IsA("BasePart") and not obj.Anchored then
+                local name = obj.Name:lower()
+                local parentName = obj.Parent and obj.Parent.Name:lower() or ""
+                
+                local isMapPart = parentName:find("map") or parentName:find("logo") or parentName:find("field") or parentName:find("stadium") or parentName:find("line")
+                if (name:find("ball") or name:find("football")) and not isMapPart and not name:find("spawn") and not name:find("bound") then
+                    if hrp then
+                        local dist = (hrp.Position - obj.Position).Magnitude
+                        if dist < shortestDist then
+                            shortestDist = dist
+                            bestBall = obj
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    return bestBall
 end
 
 -- Dive Animation Detector
@@ -324,13 +359,10 @@ local function getStickyTargetPos(maxDist)
                 local d = (hrp.Position - eHrp.Position).Magnitude
                 if d < bestDist then
                     bestDist = d
-                    -- Check if Crozo Hitbox Expander is active
                     if _G.HubConfig.HeadHitbox and _G.HubConfig.HeadHitbox.Enabled then
-                        -- Stick to the TOP surface of the expanded Crozo Hitbox
                         local topHitboxY = (eHrp.Size.Y / 2) + 1.2
                         bestPos = eHrp.Position + Vector3.new(0, topHitboxY, 0)
                     else
-                        -- Hitbox OFF: Stick directly to the Head
                         bestPos = eHead.Position + Vector3.new(0, 2.5, 0)
                     end
                 end
@@ -345,41 +377,82 @@ end
 -- ================================================================================
 
 ----------------------------------------------------------------------------------
--- 1. LEGIT PULL VECTOR (HOLD KEYBIND MECHANIC)
+-- 1. JUMP VECTOR (JPV) MECHANIC (TOGGLE MODE)
 ----------------------------------------------------------------------------------
-local pvHeld = false
+local pullActive = false
+local pullStart = 0
+local pullDuration = 0.50
 
-UserInputService.InputBegan:Connect(function(inp, gpe)
-    if gpe then return end
-    local isM1 = inp.UserInputType == Enum.UserInputType.MouseButton1
-    local isR2 = inp.UserInputType == Enum.UserInputType.Gamepad1 and inp.KeyCode == Enum.KeyCode.ButtonR2
-    if isM1 or isR2 or inp.KeyCode == _G.HubConfig.LegitPV.Keybind then
-        pvHeld = true
+local function getFootball(): BasePart?
+    return findFootballPart()
+end
+
+local function getJPVDistance()
+    return tonumber(_G.HubConfig.JPV.MaxDist) or 10
+end
+
+local function getJumpSmooth()
+    return 0.2
+end
+
+local function getPullStrength()
+    local val = tonumber(_G.HubConfig.JPV.Value) or 1
+    return math.clamp(val, 0.01, 2)
+end
+
+local function setupJumpingListener(char)
+    local hum = char:WaitForChild("Humanoid", 3)
+    if hum then
+        hum.Jumping:Connect(function()
+            if _G.HubConfig.JPV.Enabled then
+                pullActive = true
+                pullStart = tick()
+            end
+        end)
     end
-end)
+end
 
-UserInputService.InputEnded:Connect(function(inp)
-    local isM1 = inp.UserInputType == Enum.UserInputType.MouseButton1
-    local isR2 = inp.UserInputType == Enum.UserInputType.Gamepad1 and inp.KeyCode == Enum.KeyCode.ButtonR2
-    if isM1 or isR2 or inp.KeyCode == _G.HubConfig.LegitPV.Keybind then
-        pvHeld = false
+if LocalPlayer.Character then setupJumpingListener(LocalPlayer.Character) end
+LocalPlayer.CharacterAdded:Connect(setupJumpingListener)
+
+local function applyJumpVector(dt: number)
+    local masterEnabled = _G.HubConfig.JPV.Enabled
+    if not masterEnabled then
+        pullActive = false
+        return
     end
-end)
 
-RunService.Heartbeat:Connect(function()
-    if not _G.HubConfig.LegitPV.Enabled or not pvHeld then return end
-    local char, hrp = getChar()
-    if not char or not hrp then return end
+    if not pullActive then return end
 
-    local ball = findFootballPart()
-    if ball then
-        local dist = (hrp.Position - ball.Position).Magnitude
-        if dist <= (tonumber(_G.HubConfig.LegitPV.MaxDist) or 25) then
-            local pVec = tonumber(_G.HubConfig.LegitPV.PullVec) or 0.01
-            hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(hrp.Position, ball.Position), pVec)
-        end
+    if tick() - pullStart > pullDuration then
+        pullActive = false
+        return
     end
-end)
+
+    local char, root, humanoid = getChar()
+    if not root or not humanoid then return end
+
+    local ball = getFootball()
+    if not ball then return end
+
+    local distance = (ball.Position - root.Position).Magnitude
+    local maxDist = getJPVDistance() * 10
+    if distance > maxDist then return end
+
+    local smooth = math.clamp(getJumpSmooth(), 0.2, 0.2)
+    local strength = getPullStrength() * 0.2
+
+    local targetPos = ball.Position + Vector3.new(0, 2.5, 0)
+
+    local currentCF = root.CFrame
+    local currentPos = currentCF.Position
+
+    local newPos = currentPos:Lerp(targetPos, smooth * strength)
+
+    root.CFrame = CFrame.new(newPos, newPos + currentCF.LookVector)
+end
+
+RunService.Heartbeat:Connect(applyJumpVector)
 
 ----------------------------------------------------------------------------------
 -- 2. STICKY HEAD MECHANIC (HOLD KEYBIND)
@@ -521,7 +594,6 @@ RunService.Heartbeat:Connect(function()
     local char, hrp, hum = getChar()
     if not char or not hrp or not hum then return end
 
-    -- STRICT MID-AIR CHECK: Only execute HeadPull when airborne
     local state = hum:GetState()
     local inAir = (state == Enum.HumanoidStateType.Freefall or state == Enum.HumanoidStateType.Jumping or hum.FloorMaterial == Enum.Material.Air)
     if not inAir then return end
@@ -533,10 +605,8 @@ RunService.Heartbeat:Connect(function()
     local smoothVal = math.clamp((tonumber(_G.HubConfig.HeadPull.Smoothness) or 15) / 100, 0.01, 1)
     local maxStr = tonumber(_G.HubConfig.HeadPull.MaxStrength) or 55
 
-    -- 1. Mid-air CFrame position lerp directly onto hitbox top / head
     hrp.CFrame = hrp.CFrame:Lerp(CFrame.new(targetPos), smoothVal)
 
-    -- 2. Mid-air velocity pull to eliminate air drag
     local dir = (targetPos - hrp.Position)
     if dir.Magnitude > 0.1 then
         hrp.AssemblyLinearVelocity = hrp.AssemblyLinearVelocity:Lerp(dir.Unit * maxStr, 0.35)
@@ -546,8 +616,6 @@ end)
 ----------------------------------------------------------------------------------
 -- 5. STANDALONE AUTO STICK ENGINE
 ----------------------------------------------------------------------------------
-local nudgeActive = false
-
 RunService.Heartbeat:Connect(function()
     if not _G.HubConfig.AutoStick.Enabled then return end
     local char, hrp, hum = getChar()
@@ -571,7 +639,7 @@ RunService.Heartbeat:Connect(function()
 end)
 
 ----------------------------------------------------------------------------------
--- 6. STICK BUMP ENGINE (MID-AIR BUMP BOOST RESTORED)
+-- 6. STICK BUMP ENGINE
 ----------------------------------------------------------------------------------
 local stickBumpHeld = false
 local bumpOnCooldown = false
@@ -590,7 +658,6 @@ UserInputService.InputEnded:Connect(function(inp)
     end
 end)
 
--- Heartbeat Position Tracking
 RunService.Heartbeat:Connect(function()
     if not _G.HubConfig.StickBump.Enabled or not stickBumpHeld or bumpOnCooldown then return end
     local char, hrp = getChar()
@@ -752,16 +819,6 @@ local defaultSizeX = 2.52
 local defaultSizeY = 5.4
 local defaultSizeZ = 1.41
 local defaultTransparency = 0.7
-
-local function safeDisconnectConns(t)
-    if not t then return end
-    for _, conn in ipairs(t) do
-        if conn and type(conn.Disconnect) == "function" then
-            pcall(function() conn:Disconnect() end)
-        end
-    end
-    table.clear(t)
-end
 
 local function getTargetReachSize()
     local x = tonumber(_G.HubConfig.TackleReach.SizeX) or defaultSizeX
@@ -1291,7 +1348,7 @@ function CyberGUI:CreateTab(tabName)
         return { Toggle = ToggleAction, SetState = SetState }
     end
 
-    function TabObj:AddValueChanger(labelName, configRef, configKey)
+    function TabObj:AddValueChanger(labelName, configRef, configKey, minVal, maxVal)
         local Card = Instance.new("Frame", Container)
         Card.Size = UDim2.new(0.97, 0, 0, 25)
         Card.BackgroundColor3 = THEME.Card
@@ -1318,14 +1375,39 @@ function CyberGUI:CreateTab(tabName)
         InputBox.ClearTextOnFocus = false
         Instance.new("UICorner", InputBox).CornerRadius = UDim.new(0, 3)
 
-        local function UpdateVisuals() InputBox.Text = tostring(configRef[configKey] or "") end
-        local function UpdateValue()
-            local num = tonumber(InputBox.Text)
-            if num then configRef[configKey] = num else configRef[configKey] = InputBox.Text end
+        local function UpdateVisuals()
+            if not InputBox:IsFocused() then
+                InputBox.Text = tostring(configRef[configKey] or "")
+            end
         end
 
-        InputBox:GetPropertyChangedSignal("Text"):Connect(UpdateValue)
-        InputBox.FocusLost:Connect(UpdateValue)
+        local function UpdateValueOnType()
+            local num = tonumber(InputBox.Text)
+            if num then
+                if minVal and maxVal then
+                    num = math.clamp(num, minVal, maxVal)
+                end
+                configRef[configKey] = num
+            else
+                configRef[configKey] = InputBox.Text
+            end
+        end
+
+        local function UpdateValueOnFocusLost()
+            local num = tonumber(InputBox.Text)
+            if num then
+                if minVal and maxVal then
+                    num = math.clamp(num, minVal, maxVal)
+                end
+                configRef[configKey] = num
+                InputBox.Text = tostring(num)
+            else
+                configRef[configKey] = InputBox.Text
+            end
+        end
+
+        InputBox:GetPropertyChangedSignal("Text"):Connect(UpdateValueOnType)
+        InputBox.FocusLost:Connect(UpdateValueOnFocusLost)
         table.insert(CyberGUI.RefreshCallbacks, UpdateVisuals)
         UpdateVisuals()
     end
@@ -1427,7 +1509,7 @@ function CyberGUI:CreateTab(tabName)
 end
 
 -- ================================================================================
--- TAB CONTROLS REGISTRATION (ALL VALUE CHANGERS RESTORED)
+-- TAB CONTROLS REGISTRATION
 -- ================================================================================
 
 -- 1. Qb AB Tab
@@ -1462,7 +1544,7 @@ HeadPullTab:AddValueChanger("Max Strength", _G.HubConfig.HeadPull, "MaxStrength"
 HeadPullTab:AddKeybinder("HeadPull", _G.HubConfig.HeadPull, "Keybind", headPullTgl, true)
 HeadPullTab:AddDivider()
 
--- 4. Auto Stick Tab (All Value Changers Restored)
+-- 4. Auto Stick Tab
 local AutoStickTab = CyberGUI:CreateTab("Auto Stick")
 local autoStickTgl = AutoStickTab:AddToggle("Auto Stick", _G.HubConfig.AutoStick, "Enabled")
 AutoStickTab:AddValueChanger("Activate Dist", _G.HubConfig.AutoStick, "ActivateDist")
@@ -1531,13 +1613,13 @@ MagnetTab:AddValueChanger("Catch Arm", _G.HubConfig.BTP, "CatchArm")
 MagnetTab:AddKeybinder("Ball TP", _G.HubConfig.BTP, "Keybind", btpTgl)
 MagnetTab:AddDivider()
 
--- 11. LegitPV Tab
-local PVTab = CyberGUI:CreateTab("LegitPV")
-local pvTgl = PVTab:AddToggle("Pull Vector Assist", _G.HubConfig.LegitPV, "Enabled")
-PVTab:AddValueChanger("Pull Vector Strength", _G.HubConfig.LegitPV, "PullVec")
-PVTab:AddValueChanger("Max Distance", _G.HubConfig.LegitPV, "MaxDist")
-PVTab:AddKeybinder("LegitPV", _G.HubConfig.LegitPV, "Keybind", pvTgl, true)
-PVTab:AddDivider()
+-- 11. JPV Tab (TOGGLE KEYBIND MODE)
+local JPVTab = CyberGUI:CreateTab("JPV")
+local jpvTgl = JPVTab:AddToggle("JPV Assist", _G.HubConfig.JPV, "Enabled")
+JPVTab:AddValueChanger("JPV Strength (0-2)", _G.HubConfig.JPV, "Value", 0.01, 2)
+JPVTab:AddValueChanger("Max Distance", _G.HubConfig.JPV, "MaxDist")
+JPVTab:AddKeybinder("JPV", _G.HubConfig.JPV, "Keybind", jpvTgl, false)
+JPVTab:AddDivider()
 
 -- 12. Tackle Reach Tab
 local ReachTab = CyberGUI:CreateTab("Tackle Reach")
@@ -1582,7 +1664,7 @@ local potatoTgl = VisualsTab:AddToggle("potato graphics", _G.HubConfig.PotatoGra
 VisualsTab:AddKeybinder("potato graphics", _G.HubConfig.PotatoGraphics, "Keybind", potatoTgl)
 VisualsTab:AddDivider()
 
--- 15. Hitbox Expander Tab (Crozo Hitbox Engine)
+-- 15. Hitbox Expander Tab
 local HitboxTab = CyberGUI:CreateTab("Hitbox")
 local headTgl = HitboxTab:AddToggle("Hitbox Expander", _G.HubConfig.HeadHitbox, "Enabled")
 HitboxTab:AddValueChanger("Hitbox Size", _G.HubConfig.HeadHitbox, "HeadSize")
@@ -1590,7 +1672,7 @@ HitboxTab:AddValueChanger("Transparency", _G.HubConfig.HeadHitbox, "Transparency
 HitboxTab:AddKeybinder("Hitbox Expander", _G.HubConfig.HeadHitbox, "Keybind", headTgl)
 HitboxTab:AddDivider()
 
--- 16. Misc Tab & Complete Config System Engine
+-- 16. Misc Tab & Config System
 local MiscTab = CyberGUI:CreateTab("Misc")
 MiscTab:AddKeybinder("Gui Toggle", _G.HubConfig.Misc, "Keybind", nil, false, true, function() MainFrame.Visible = not MainFrame.Visible end)
 MiscTab:AddDivider()
@@ -1630,7 +1712,7 @@ local function GetCurrentAutoload()
     return "None"
 end
 
--- 1. Config Name Input Card
+-- Config Name Input Card
 local NameCard = Instance.new("Frame", MiscTab.Container)
 NameCard.Size = UDim2.new(0.97, 0, 0, 25)
 NameCard.BackgroundColor3 = THEME.Card
@@ -1660,7 +1742,7 @@ Instance.new("UICorner", ConfigInputBox).CornerRadius = UDim.new(0, 3)
 
 ConfigInputBox:GetPropertyChangedSignal("Text"):Connect(function() currentConfigName = ConfigInputBox.Text end)
 
--- 2. Dropdown List Card
+-- Dropdown List Card
 local DropCard = Instance.new("Frame", MiscTab.Container)
 DropCard.Size = UDim2.new(0.97, 0, 0, 25)
 DropCard.BackgroundColor3 = THEME.Card
